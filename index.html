@@ -71,12 +71,26 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-header"><span class="card-title">Passtyper</span></div>
-      <div style="display:flex;align-items:center;gap:1rem;height:180px">
-        <div style="position:relative;width:140px;height:140px;flex-shrink:0">
-          <canvas id="chart-types" role="img" aria-label="Fördelning av passtyper">Laddar...</canvas>
+      <div class="card-header"><span class="card-title">Styrka & löpbalans</span></div>
+      <div id="strength-balance" style="height:180px;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:0 4px">
+        <div style="display:flex;gap:1.5rem">
+          <div>
+            <div class="metric-value" id="s-count" style="font-size:22px">–</div>
+            <div class="metric-sub">styrkepass</div>
+            <div class="metric-sub" id="s-per-week" style="margin-top:2px"></div>
+          </div>
+          <div style="border-left:0.5px solid var(--border);padding-left:1.5rem">
+            <div class="metric-value" id="s-pct" style="font-size:22px">–</div>
+            <div class="metric-sub">av löpveckor inkl. styrka</div>
+            <div class="metric-sub" id="s-pct-note" style="margin-top:2px"></div>
+          </div>
         </div>
-        <div id="types-legend" style="font-size:13px;color:var(--text2)"></div>
+        <div id="s-bar-wrap" style="display:none">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px" id="s-bar-label"></div>
+          <div style="background:var(--surface2);border-radius:3px;height:6px;width:100%">
+            <div id="s-bar-fill" style="height:6px;border-radius:3px;transition:width 0.4s"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -318,21 +332,31 @@ function renderCharts(acts, runs) {
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{grid:{color:'rgba(128,128,128,0.08)'},ticks:{font:{size:11}}},x:{grid:{display:false},ticks:{font:{size:11}}}}}
   });
 
-  // Type donut
-  const typeCounts = { running: runs.length, strength: acts.filter(a=>a.activity_type==='strength').length, hiking: acts.filter(a=>a.activity_type==='hiking').length };
-  const typeColors = { running:'#185FA5', strength:'#534AB7', hiking:'#1d9e75' };
-  const typeEntries = Object.entries(typeCounts).filter(([,v])=>v>0);
-  charts.types = new Chart(document.getElementById('chart-types'), {
-    type:'doughnut',
-    data:{
-      labels:typeEntries.map(([k])=>typeLabel(k)),
-      datasets:[{data:typeEntries.map(([,v])=>v),backgroundColor:typeEntries.map(([k])=>typeColors[k]),borderWidth:0}]
-    },
-    options:{responsive:false,cutout:'65%',plugins:{legend:{display:false},tooltip:{callbacks:{label:v=>`${v.label}: ${v.raw}`}}}}
-  });
-  document.getElementById('types-legend').innerHTML = typeEntries.map(([k,v])=>
-    `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="width:10px;height:10px;border-radius:2px;background:${typeColors[k]};flex-shrink:0"></span>${typeLabel(k)}: ${v}</div>`
-  ).join('');
+  // Strength balance
+  const strengths = acts.filter(a => a.activity_type === 'strength');
+  const fromD = new Date(document.getElementById('filter-from')?.value || '2000-01-01');
+  const toD   = new Date(document.getElementById('filter-to')?.value   || new Date());
+  const periodWeeks = Math.max(1, Math.round((toD - fromD) / (7 * 24 * 3600 * 1000)));
+
+  const toWeekKey = d => { const dt = new Date(d); const mon = new Date(dt); mon.setDate(dt.getDate() - ((dt.getDay()+6)%7)); return mon.toISOString().slice(0,10); };
+  const runWeeks = new Set(runs.map(a => toWeekKey(a.activity_date)));
+  const strWeeks = new Set(strengths.map(a => toWeekKey(a.activity_date)));
+  const bothWeeks = [...runWeeks].filter(w => strWeeks.has(w)).length;
+  const pct = runWeeks.size > 0 ? Math.round(bothWeeks / runWeeks.size * 100) : 0;
+  const perWeek = (strengths.length / periodWeeks).toFixed(1);
+
+  document.getElementById('s-count').textContent = strengths.length || '–';
+  document.getElementById('s-per-week').textContent = strengths.length ? perWeek + '/vecka' : '';
+  document.getElementById('s-pct').textContent = runWeeks.size ? pct + '%' : '–';
+  document.getElementById('s-pct').style.color = pct >= 60 ? 'var(--z1t)' : pct >= 35 ? 'var(--z3t)' : 'var(--z5t)';
+  document.getElementById('s-pct-note').textContent = pct >= 60 ? 'Bra konsistens' : pct >= 35 ? 'Kan förbättras' : runWeeks.size ? 'Låg frekvens' : '';
+
+  if (runWeeks.size > 0) {
+    document.getElementById('s-bar-wrap').style.display = 'block';
+    document.getElementById('s-bar-label').textContent = `${bothWeeks} av ${runWeeks.size} löpveckor inkluderade styrka`;
+    document.getElementById('s-bar-fill').style.width = pct + '%';
+    document.getElementById('s-bar-fill').style.background = pct >= 60 ? '#1d9e75' : pct >= 35 ? '#ba7517' : '#e24b4a';
+  }
 }
 
 init();
