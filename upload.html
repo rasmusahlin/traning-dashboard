@@ -40,8 +40,8 @@
     <div class="upload-zone" id="drop-zone" onclick="document.getElementById('fit-input').click()">
       <div class="upload-icon">↑</div>
       <div class="upload-title">Dra och släpp FIT-fil här</div>
-      <div class="upload-sub">Eller klicka för att välja fil · .fit</div>
-      <input type="file" id="fit-input" accept=".fit" style="display:none" onchange="handleFile(this.files[0])">
+      <div class="upload-sub">Eller klicka för att välja en eller flera .fit-filer</div>
+      <input type="file" id="fit-input" accept=".fit" multiple style="display:none" onchange="handleFiles(this.files)">
     </div>
     <div id="upload-state" style="display:none;margin-top:1rem">
       <div id="progress-msg" style="font-size:14px;color:var(--text2);margin-bottom:1rem"></div>
@@ -86,32 +86,28 @@ document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
 const dz = document.getElementById('drop-zone');
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
 dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
-dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); handleFiles(e.dataTransfer.files); });
 
-let parsedData = null;
+// ── Helpers ────────────────────────────────────────────────────────────────
+function num(v)  { var x = parseFloat(v); return isFinite(x) ? x : null; }
+function numi(v) { var x = parseFloat(v); return isFinite(x) ? Math.round(x) : null; }
+function avg(arr) { return arr.length ? Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length) : null; }
 
+// ── FIT parser ─────────────────────────────────────────────────────────────
 function parseFitFile(file) {
   return new Promise(function(resolve, reject) {
     if (typeof FitParser === 'undefined') {
-      reject(new Error('FitParser saknas – kontrollera att js/fitparser-bundle.min.js finns i repot och är uppladdad till GitHub.'));
+      reject(new Error('FitParser saknas – kontrollera att js/fitparser-bundle.min.js finns i repot.'));
       return;
     }
     var reader = new FileReader();
     reader.onerror = function() { reject(new Error('Kunde inte läsa filen.')); };
     reader.onload = function(e) {
       try {
-        var parser = new FitParser({
-          force: true,
-          speedUnit: 'km/h',
-          lengthUnit: 'm',
-          temperatureUnit: 'celsius',
-          elapsedRecordField: true,
-          mode: 'list'
-        });
+        var parser = new FitParser({ force:true, speedUnit:'km/h', lengthUnit:'m', temperatureUnit:'celsius', elapsedRecordField:true, mode:'list' });
         parser.parse(e.target.result, function(error, data) {
           if (error) { reject(new Error('FIT-parsningsfel: ' + error)); return; }
-          try { resolve(processFitData(data, file.name)); }
-          catch(pe) { reject(pe); }
+          try { resolve(processFitData(data, file.name)); } catch(pe) { reject(pe); }
         });
       } catch(err) { reject(err); }
     };
@@ -119,31 +115,42 @@ function parseFitFile(file) {
   });
 }
 
-function num(v)  { var x = parseFloat(v); return isFinite(x) ? x : null; }
-function numi(v) { var x = parseFloat(v); return isFinite(x) ? Math.round(x) : null; }
+function detectActivityType(session, data) {
+  var sport = (session.sport || '').toLowerCase();
+  var sub   = (session.sub_sport || '').toLowerCase();
+  // Explicit strength signals
+  if (sport.includes('strength') || sport.includes('training') || sub.includes('strength') ||
+      sport.includes('gym') || sub.includes('gym') || sport.includes('cardio') ||
+      (data.sets && data.sets.length > 0)) return 'strength';
+  if (sport.includes('run')) return 'running';
+  if (sport.includes('walk') || sport.includes('hik')) return 'hiking';
+  // Fallback: no GPS distance = likely strength
+  var dist = parseFloat(session.total_distance);
+  if (!isFinite(dist) || dist < 100) return 'strength';
+  return 'hiking';
+}
 
 function processFitData(data, filename) {
   var session = (data.sessions && data.sessions[0]) || {};
   var laps    = data.laps    || [];
   var records = data.records || [];
-  var sport   = (session.sport || '').toLowerCase();
-  var actType = sport.includes('run') ? 'running' : (sport.includes('strength') || sport.includes('gym')) ? 'strength' : 'hiking';
+  var actType = detectActivityType(session, data);
   var startTime = session.start_time ? new Date(session.start_time) : new Date();
 
   var summary = {
     activity_date:         startTime.toISOString().slice(0, 10),
     activity_type:         actType,
     sport_raw:             String(session.sport || ''),
-    distance_meters:       num(session.total_distance),
+    distance_meters:       actType === 'strength' ? null : num(session.total_distance),
     duration_seconds:      num(session.total_elapsed_time),
     moving_time_seconds:   num(session.total_timer_time),
     avg_hr:                numi(session.avg_heart_rate),
     max_hr:                numi(session.max_heart_rate),
-    avg_cadence:           session.avg_running_cadence ? numi(session.avg_running_cadence * 2) : null,
-    avg_speed_ms:          session.avg_speed ? num(session.avg_speed / 3.6) : null,
-    max_speed_ms:          session.max_speed ? num(session.max_speed / 3.6) : null,
-    elevation_gain_meters: num(session.total_ascent),
-    elevation_loss_meters: num(session.total_descent),
+    avg_cadence:           actType === 'running' && session.avg_running_cadence ? numi(session.avg_running_cadence * 2) : null,
+    avg_speed_ms:          actType !== 'strength' && session.avg_speed ? num(session.avg_speed / 3.6) : null,
+    max_speed_ms:          actType !== 'strength' && session.max_speed ? num(session.max_speed / 3.6) : null,
+    elevation_gain_meters: actType !== 'strength' ? num(session.total_ascent) : null,
+    elevation_loss_meters: actType !== 'strength' ? num(session.total_descent) : null,
     calories:              numi(session.total_calories),
     filename:              filename,
     notes:                 null
@@ -157,73 +164,47 @@ function processFitData(data, filename) {
       duration_seconds:    num(lap.total_elapsed_time),
       avg_hr:              numi(lap.avg_heart_rate),
       max_hr:              numi(lap.max_heart_rate),
-      avg_pace_sec_per_km: lap.avg_speed ? num(3600 / lap.avg_speed) : null,
-      avg_cadence:         lap.avg_running_cadence ? numi(lap.avg_running_cadence * 2) : null,
+      avg_pace_sec_per_km: actType === 'running' && lap.avg_speed ? num(3600 / lap.avg_speed) : null,
+      avg_cadence:         actType === 'running' && lap.avg_running_cadence ? numi(lap.avg_running_cadence * 2) : null,
       elevation_gain:      num(lap.total_ascent),
       calories:            numi(lap.total_calories),
       lap_trigger:         String(lap.lap_trigger || 'manual')
     };
   });
 
-  return {
-    summary:    summary,
-    laps:       processedLaps,
-    kmSplits:   buildKmSplits(records),
-    timeSeries: buildTimeSeries(records)
-  };
+  var kmSplits  = actType === 'running' ? buildKmSplits(records) : [];
+  var timeSeries = buildTimeSeries(records);
+
+  return { summary:summary, laps:processedLaps, kmSplits:kmSplits, timeSeries:timeSeries };
 }
 
 function buildKmSplits(records) {
   if (!records.length) return [];
-  var splits = [];
-  var splitStartTime = 0, splitStartDist = 0;
+  var splits = [], splitStartTime = 0, splitStartDist = 0;
   var hrVals = [], cadVals = [], altVals = [];
-
   records.forEach(function(r) {
-    var dist = r.distance || 0;
-    var time = r.elapsed_time || 0;
+    var dist = r.distance || 0, time = r.elapsed_time || 0;
     if (r.heart_rate) hrVals.push(r.heart_rate);
     if (r.cadence)    cadVals.push(r.cadence * 2);
     if (r.altitude)   altVals.push(r.altitude);
-
-    var km     = Math.floor(dist / 1000);
-    var prevKm = Math.floor(splitStartDist / 1000);
-
+    var km = Math.floor(dist / 1000), prevKm = Math.floor(splitStartDist / 1000);
     if (km > prevKm && dist > 0) {
-      var splitDist = dist - splitStartDist;
-      var splitTime = time - splitStartTime;
-      var avg = function(arr) { return arr.length ? Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length) : null; };
-      splits.push({
-        km:               km,
-        distance_meters:  num(splitDist),
-        duration_seconds: num(splitTime),
-        pace_sec_per_km:  splitDist > 0 ? num(splitTime / (splitDist / 1000)) : null,
-        avg_hr:           avg(hrVals),
-        avg_cadence:      avg(cadVals),
-        elevation_gain:   altVals.length > 1 ? num(Math.max(0, altVals[altVals.length-1] - altVals[0])) : null,
-        partial:          false
-      });
-      splitStartTime = time;
-      splitStartDist = dist;
+      var sd = dist - splitStartDist, st = time - splitStartTime;
+      splits.push({ km:km, distance_meters:num(sd), duration_seconds:num(st),
+        pace_sec_per_km:sd > 0 ? num(st / (sd/1000)) : null,
+        avg_hr:avg(hrVals), avg_cadence:avg(cadVals),
+        elevation_gain:altVals.length > 1 ? num(Math.max(0, altVals[altVals.length-1]-altVals[0])) : null,
+        partial:false });
+      splitStartTime = time; splitStartDist = dist;
       hrVals = []; cadVals = []; altVals = [];
     }
   });
-
-  var last = records[records.length - 1] || {};
-  var remainDist = (last.distance || 0) - splitStartDist;
-  if (remainDist > 100) {
-    var splitTime = (last.elapsed_time || 0) - splitStartTime;
-    var avg = function(arr) { return arr.length ? Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length) : null; };
-    splits.push({
-      km:               Math.ceil((last.distance||0) / 1000),
-      distance_meters:  num(remainDist),
-      duration_seconds: num(splitTime),
-      pace_sec_per_km:  num(splitTime / (remainDist / 1000)),
-      avg_hr:           avg(hrVals),
-      avg_cadence:      avg(cadVals),
-      elevation_gain:   null,
-      partial:          true
-    });
+  var last = records[records.length-1] || {}, rem = (last.distance||0) - splitStartDist;
+  if (rem > 100) {
+    var st = (last.elapsed_time||0) - splitStartTime;
+    splits.push({ km:Math.ceil((last.distance||0)/1000), distance_meters:num(rem),
+      duration_seconds:num(st), pace_sec_per_km:num(st/(rem/1000)),
+      avg_hr:avg(hrVals), avg_cadence:avg(cadVals), elevation_gain:null, partial:true });
   }
   return splits;
 }
@@ -231,81 +212,143 @@ function buildKmSplits(records) {
 function buildTimeSeries(records) {
   if (!records.length) return [];
   var step = Math.max(1, Math.floor(records.length / 500));
-  return records.filter(function(_, i) { return i % step === 0; }).map(function(r) {
-    return {
-      t:       num(r.elapsed_time) || 0,
-      d:       num(r.distance)     || 0,
-      hr:      numi(r.heart_rate),
-      alt:     num(r.altitude),
-      speed:   r.speed   ? num(r.speed / 3.6) : null,
-      cadence: r.cadence ? numi(r.cadence * 2) : null
-    };
+  return records.filter(function(_,i){return i%step===0;}).map(function(r) {
+    return { t:num(r.elapsed_time)||0, d:num(r.distance)||0, hr:numi(r.heart_rate),
+             alt:num(r.altitude), speed:r.speed?num(r.speed/3.6):null, cadence:r.cadence?numi(r.cadence*2):null };
   });
 }
 
-async function handleFile(file) {
-  if (!file) return;
+// ── Batch upload state ─────────────────────────────────────────────────────
+var batchQueue = [];
+var batchResults = { ok:0, skip:0, errors:[] };
+
+async function handleFiles(files) {
+  if (!files || !files.length) return;
+  batchQueue = Array.from(files);
+  batchResults = { ok:0, skip:0, errors:[] };
+
   var state   = document.getElementById('upload-state');
+  var actions = document.getElementById('upload-actions');
+  state.style.display   = 'block';
+  actions.style.display = 'none';
+
+  if (batchQueue.length === 1) {
+    // Single file: show preview before saving
+    await handleSinglePreview(batchQueue[0]);
+  } else {
+    // Multiple files: import all automatically with progress
+    await runBatchImport();
+  }
+}
+
+async function handleSinglePreview(file) {
   var msg     = document.getElementById('progress-msg');
   var preview = document.getElementById('preview-content');
   var actions = document.getElementById('upload-actions');
-
-  state.style.display   = 'block';
-  actions.style.display = 'none';
   msg.textContent = 'Läser ' + file.name + '...';
   preview.innerHTML = '';
-
   try {
-    parsedData = await parseFitFile(file);
-    var s    = parsedData.summary;
-    var pace = s.duration_seconds && s.distance_meters ? fmtPace(s.duration_seconds / (s.distance_meters / 1000)) : '–';
-
+    var pd = await parseFitFile(file);
+    var s = pd.summary;
+    var isRun = s.activity_type === 'running';
+    var pace = isRun && s.duration_seconds && s.distance_meters ? fmtPace(s.duration_seconds / (s.distance_meters / 1000)) : null;
     msg.textContent = 'Pass inläst – ' + fmtDate(s.activity_date) + ' · ' + typeLabel(s.activity_type);
-
     preview.innerHTML =
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem">' +
-        '<div class="metric"><div class="metric-label">Distans</div><div class="metric-value" style="font-size:18px">' + (s.distance_meters ? (s.distance_meters/1000).toFixed(2)+' km' : '–') + '</div></div>' +
-        '<div class="metric"><div class="metric-label">Tid</div><div class="metric-value" style="font-size:18px">' + fmtDuration(s.duration_seconds) + '</div></div>' +
-        '<div class="metric"><div class="metric-label">Pace</div><div class="metric-value" style="font-size:18px">' + pace + '/km</div></div>' +
-        '<div class="metric"><div class="metric-label">Snitt HR</div><div class="metric-value" style="font-size:18px">' + (s.avg_hr||'–') + ' bpm</div></div>' +
+        '<div class="metric"><div class="metric-label">Typ</div><div class="metric-value" style="font-size:16px">' + typeLabel(s.activity_type) + '</div></div>' +
+        '<div class="metric"><div class="metric-label">Tid</div><div class="metric-value" style="font-size:16px">' + fmtDuration(s.duration_seconds) + '</div></div>' +
+        (isRun ? '<div class="metric"><div class="metric-label">Distans</div><div class="metric-value" style="font-size:16px">' + (s.distance_meters?(s.distance_meters/1000).toFixed(2)+' km':'–') + '</div></div>' : '') +
+        (isRun && pace ? '<div class="metric"><div class="metric-label">Pace</div><div class="metric-value" style="font-size:16px">' + pace + '/km</div></div>' : '') +
+        '<div class="metric"><div class="metric-label">Snitt HR</div><div class="metric-value" style="font-size:16px">' + (s.avg_hr||'–') + ' bpm</div></div>' +
       '</div>' +
-      '<div style="font-size:13px;color:var(--text2)">' + parsedData.laps.length + ' laps · ' + parsedData.kmSplits.length + ' km-splits · ' + parsedData.timeSeries.length + ' tidpunkter' + (s.elevation_gain_meters ? ' · +' + Math.round(s.elevation_gain_meters) + ' m' : '') + '</div>';
-
+      '<div style="font-size:13px;color:var(--text2)">' +
+        pd.laps.length + ' laps' +
+        (isRun ? ' · ' + pd.kmSplits.length + ' km-splits' : '') +
+        ' · ' + pd.timeSeries.length + ' tidpunkter' +
+        (s.elevation_gain_meters ? ' · +' + Math.round(s.elevation_gain_meters) + ' m' : '') +
+      '</div>';
     actions.style.display = 'flex';
     actions.innerHTML =
-      '<button class="btn btn-primary" onclick="saveActivity()">Spara till dashboard</button>' +
+      '<button class="btn btn-primary" onclick="saveSingle(' + JSON.stringify(null) + ')">Spara till dashboard</button>' +
       '<button class="btn" onclick="document.getElementById(\'upload-state\').style.display=\'none\'">Avbryt</button>';
+    // Store for save
+    window._pendingSingle = pd;
   } catch(e) {
-    msg.textContent = 'Fel vid inläsning: ' + e.message;
+    document.getElementById('progress-msg').textContent = 'Fel: ' + e.message;
     console.error(e);
   }
 }
 
-async function saveActivity() {
-  if (!parsedData) return;
+async function saveSingle() {
+  var pd = window._pendingSingle;
+  if (!pd) return;
   var btn = document.querySelector('#upload-actions .btn-primary');
-  btn.textContent = 'Sparar...';
-  btn.disabled = true;
+  btn.textContent = 'Sparar...'; btn.disabled = true;
   try {
-    var saved = await dbInsert('activities', parsedData.summary);
-    var actId = Array.isArray(saved) ? saved[0].id : saved.id;
-    if (parsedData.laps.length)
-      await dbInsert('laps', parsedData.laps.map(function(l) { return Object.assign({}, l, {activity_id: actId}); }));
-    if (parsedData.kmSplits.length)
-      await dbInsert('km_splits', parsedData.kmSplits.map(function(s) { return Object.assign({}, s, {activity_id: actId}); }));
-    if (parsedData.timeSeries.length) {
-      var step = Math.max(1, Math.floor(parsedData.timeSeries.length / 500));
-      var sampled = parsedData.timeSeries.filter(function(_, i) { return i % step === 0; });
-      await dbInsert('time_series', sampled.map(function(p) { return Object.assign({}, p, {activity_id: actId}); }));
-    }
+    await saveOneParsed(pd);
     toast('Pass sparat!');
-    setTimeout(function() { location.href = 'activity.html?id=' + actId; }, 1000);
+    setTimeout(function() { location.href = 'index.html'; }, 1000);
   } catch(e) {
-    toast('Fel: ' + e.message);
-    btn.textContent = 'Spara till dashboard';
-    btn.disabled = false;
-    console.error(e);
+    toast('Fel: ' + e.message); btn.textContent = 'Spara till dashboard'; btn.disabled = false;
   }
+}
+
+async function runBatchImport() {
+  var msg     = document.getElementById('progress-msg');
+  var preview = document.getElementById('preview-content');
+  var total   = batchQueue.length;
+
+  for (var i = 0; i < batchQueue.length; i++) {
+    var file = batchQueue[i];
+    var pct  = Math.round(((i) / total) * 100);
+    msg.innerHTML =
+      '<div style="margin-bottom:8px">Importerar ' + (i+1) + ' / ' + total + ' &nbsp;·&nbsp; ' + file.name + '</div>' +
+      '<div style="background:var(--surface2);border-radius:4px;height:6px;width:100%">' +
+        '<div style="background:#185FA5;height:6px;border-radius:4px;width:' + pct + '%;transition:width 0.2s"></div>' +
+      '</div>';
+    try {
+      var pd = await parseFitFile(file);
+      await saveOneParsed(pd);
+      batchResults.ok++;
+    } catch(e) {
+      batchResults.errors.push(file.name + ': ' + e.message);
+      batchResults.skip++;
+      console.error(file.name, e);
+    }
+  }
+
+  // Done
+  msg.innerHTML =
+    '<div style="margin-bottom:8px">Import klar</div>' +
+    '<div style="background:var(--surface2);border-radius:4px;height:6px;width:100%">' +
+      '<div style="background:#1d9e75;height:6px;border-radius:4px;width:100%"></div>' +
+    '</div>';
+  preview.innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:1rem">' +
+      '<div class="metric"><div class="metric-label">Importerade</div><div class="metric-value" style="color:#1d9e75">' + batchResults.ok + '</div></div>' +
+      '<div class="metric"><div class="metric-label">Hoppade över</div><div class="metric-value">' + batchResults.skip + '</div></div>' +
+      '<div class="metric"><div class="metric-label">Totalt</div><div class="metric-value">' + total + '</div></div>' +
+    '</div>' +
+    (batchResults.errors.length ? '<div style="margin-top:1rem;font-size:12px;color:var(--text3)">' + batchResults.errors.slice(0,5).join('<br>') + '</div>' : '');
+
+  var actions = document.getElementById('upload-actions');
+  actions.style.display = 'flex';
+  actions.innerHTML = '<a href="index.html" class="btn btn-primary">Gå till översikten</a>';
+}
+
+async function saveOneParsed(pd) {
+  var saved = await dbInsert('activities', pd.summary);
+  var actId = Array.isArray(saved) ? saved[0].id : saved.id;
+  if (pd.laps.length)
+    await dbInsert('laps', pd.laps.map(function(l){return Object.assign({},l,{activity_id:actId});}));
+  if (pd.kmSplits.length)
+    await dbInsert('km_splits', pd.kmSplits.map(function(s){return Object.assign({},s,{activity_id:actId});}));
+  if (pd.timeSeries.length) {
+    var step = Math.max(1, Math.floor(pd.timeSeries.length / 500));
+    var sampled = pd.timeSeries.filter(function(_,i){return i%step===0;});
+    await dbInsert('time_series', sampled.map(function(p){return Object.assign({},p,{activity_id:actId});}));
+  }
+  return actId;
 }
 
 function parseManualDuration(s) {
@@ -336,6 +379,7 @@ async function saveManual() {
     setTimeout(function() { location.href = 'activity.html?id=' + actId; }, 1000);
   } catch(e) { toast('Fel: ' + e.message); console.error(e); }
 }
+
 </script>
 </body>
 </html>
