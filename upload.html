@@ -232,12 +232,20 @@ async function handleFiles(files) {
   state.style.display   = 'block';
   actions.style.display = 'none';
 
+  var msg = document.getElementById('progress-msg');
+  msg.textContent = batchQueue.length + ' fil(er) valda...';
+
   if (batchQueue.length === 1) {
-    // Single file: show preview before saving
     await handleSinglePreview(batchQueue[0]);
   } else {
-    // Multiple files: import all automatically with progress
-    await runBatchImport();
+    // Show confirm before batch import
+    var preview = document.getElementById('preview-content');
+    preview.innerHTML = '';
+    msg.textContent = batchQueue.length + ' FIT-filer valda – klar att importera?';
+    actions.style.display = 'flex';
+    actions.innerHTML =
+      '<button class="btn btn-primary" onclick="runBatchImport()">Importera alla ' + batchQueue.length + ' pass</button>' +
+      '<button class="btn" onclick="document.getElementById(\'upload-state\').style.display=\'none\'">Avbryt</button>';
   }
 }
 
