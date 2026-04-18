@@ -119,6 +119,9 @@ function parseFitFile(file) {
   });
 }
 
+function num(v)  { var x = parseFloat(v); return isFinite(x) ? x : null; }
+function numi(v) { var x = parseFloat(v); return isFinite(x) ? Math.round(x) : null; }
+
 function processFitData(data, filename) {
   var session = (data.sessions && data.sessions[0]) || {};
   var laps    = data.laps    || [];
@@ -130,18 +133,18 @@ function processFitData(data, filename) {
   var summary = {
     activity_date:         startTime.toISOString().slice(0, 10),
     activity_type:         actType,
-    sport_raw:             session.sport || '',
-    distance_meters:       session.total_distance      || null,
-    duration_seconds:      session.total_elapsed_time  || null,
-    moving_time_seconds:   session.total_timer_time    || null,
-    avg_hr:                session.avg_heart_rate      || null,
-    max_hr:                session.max_heart_rate      || null,
-    avg_cadence:           session.avg_running_cadence ? session.avg_running_cadence * 2 : null,
-    avg_speed_ms:          session.avg_speed           ? session.avg_speed / 3.6 : null,
-    max_speed_ms:          session.max_speed           ? session.max_speed / 3.6 : null,
-    elevation_gain_meters: session.total_ascent        || null,
-    elevation_loss_meters: session.total_descent       || null,
-    calories:              session.total_calories      || null,
+    sport_raw:             String(session.sport || ''),
+    distance_meters:       num(session.total_distance),
+    duration_seconds:      num(session.total_elapsed_time),
+    moving_time_seconds:   num(session.total_timer_time),
+    avg_hr:                numi(session.avg_heart_rate),
+    max_hr:                numi(session.max_heart_rate),
+    avg_cadence:           session.avg_running_cadence ? numi(session.avg_running_cadence * 2) : null,
+    avg_speed_ms:          session.avg_speed ? num(session.avg_speed / 3.6) : null,
+    max_speed_ms:          session.max_speed ? num(session.max_speed / 3.6) : null,
+    elevation_gain_meters: num(session.total_ascent),
+    elevation_loss_meters: num(session.total_descent),
+    calories:              numi(session.total_calories),
     filename:              filename,
     notes:                 null
   };
@@ -150,15 +153,15 @@ function processFitData(data, filename) {
     return {
       lap_index:           i + 1,
       start_time:          lap.start_time ? new Date(lap.start_time).toISOString() : null,
-      distance_meters:     lap.total_distance      || 0,
-      duration_seconds:    lap.total_elapsed_time  || 0,
-      avg_hr:              lap.avg_heart_rate       || null,
-      max_hr:              lap.max_heart_rate       || null,
-      avg_pace_sec_per_km: lap.avg_speed            ? 3600 / lap.avg_speed : null,
-      avg_cadence:         lap.avg_running_cadence  ? lap.avg_running_cadence * 2 : null,
-      elevation_gain:      lap.total_ascent         || null,
-      calories:            lap.total_calories       || null,
-      lap_trigger:         lap.lap_trigger          || 'manual'
+      distance_meters:     num(lap.total_distance),
+      duration_seconds:    num(lap.total_elapsed_time),
+      avg_hr:              numi(lap.avg_heart_rate),
+      max_hr:              numi(lap.max_heart_rate),
+      avg_pace_sec_per_km: lap.avg_speed ? num(3600 / lap.avg_speed) : null,
+      avg_cadence:         lap.avg_running_cadence ? numi(lap.avg_running_cadence * 2) : null,
+      elevation_gain:      num(lap.total_ascent),
+      calories:            numi(lap.total_calories),
+      lap_trigger:         String(lap.lap_trigger || 'manual')
     };
   });
 
@@ -192,12 +195,12 @@ function buildKmSplits(records) {
       var avg = function(arr) { return arr.length ? Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length) : null; };
       splits.push({
         km:               km,
-        distance_meters:  splitDist,
-        duration_seconds: splitTime,
-        pace_sec_per_km:  splitDist > 0 ? splitTime / (splitDist / 1000) : null,
+        distance_meters:  num(splitDist),
+        duration_seconds: num(splitTime),
+        pace_sec_per_km:  splitDist > 0 ? num(splitTime / (splitDist / 1000)) : null,
         avg_hr:           avg(hrVals),
         avg_cadence:      avg(cadVals),
-        elevation_gain:   altVals.length > 1 ? Math.max(0, altVals[altVals.length-1] - altVals[0]) : null,
+        elevation_gain:   altVals.length > 1 ? num(Math.max(0, altVals[altVals.length-1] - altVals[0])) : null,
         partial:          false
       });
       splitStartTime = time;
@@ -213,9 +216,9 @@ function buildKmSplits(records) {
     var avg = function(arr) { return arr.length ? Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length) : null; };
     splits.push({
       km:               Math.ceil((last.distance||0) / 1000),
-      distance_meters:  remainDist,
-      duration_seconds: splitTime,
-      pace_sec_per_km:  splitTime / (remainDist / 1000),
+      distance_meters:  num(remainDist),
+      duration_seconds: num(splitTime),
+      pace_sec_per_km:  num(splitTime / (remainDist / 1000)),
       avg_hr:           avg(hrVals),
       avg_cadence:      avg(cadVals),
       elevation_gain:   null,
@@ -230,12 +233,12 @@ function buildTimeSeries(records) {
   var step = Math.max(1, Math.floor(records.length / 500));
   return records.filter(function(_, i) { return i % step === 0; }).map(function(r) {
     return {
-      t:       r.elapsed_time || 0,
-      d:       r.distance     || 0,
-      hr:      r.heart_rate   || null,
-      alt:     r.altitude     || null,
-      speed:   r.speed        ? r.speed / 3.6 : null,
-      cadence: r.cadence      ? r.cadence * 2 : null
+      t:       num(r.elapsed_time) || 0,
+      d:       num(r.distance)     || 0,
+      hr:      numi(r.heart_rate),
+      alt:     num(r.altitude),
+      speed:   r.speed   ? num(r.speed / 3.6) : null,
+      cadence: r.cadence ? numi(r.cadence * 2) : null
     };
   });
 }
