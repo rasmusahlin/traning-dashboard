@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inställningar – Träningsdashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <span class="nav-brand">Träningsdashboard</span>
+    <div class="nav-links">
+      <a href="index.html">Översikt</a>
+      <a href="upload.html">Ladda upp</a>
+      <a href="settings.html" class="active">Inställningar</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>Inställningar</h1>
+    <p>Konfigureras och sparas lokalt i webbläsaren</p>
+  </div>
+
+  <!-- HR Zones -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Pulszoner</span></div>
+
+    <div style="margin-bottom:1.5rem">
+      <label style="font-size:14px;font-weight:500;display:block;margin-bottom:6px">Maxpuls</label>
+      <div style="display:flex;align-items:center;gap:12px">
+        <input type="number" id="hr-max" value="190" min="140" max="220" style="width:80px;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:16px">
+        <span style="font-size:14px;color:var(--text2)">bpm</span>
+      </div>
+      <p style="font-size:13px;color:var(--text3);margin-top:6px">Nuvarande: 190 bpm (uppdatera när du vet din verkliga maxpuls)</p>
+    </div>
+
+    <div id="zone-preview"><!-- rendered by JS --></div>
+
+    <button class="btn btn-primary" onclick="saveSettings()" style="margin-top:1rem">Spara inställningar</button>
+    <span id="save-msg" style="font-size:13px;color:var(--text2);margin-left:8px"></span>
+  </div>
+
+  <!-- DB info -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Databas</span></div>
+    <table style="width:100%;font-size:14px;border-collapse:collapse">
+      <tr><td style="padding:8px 0;color:var(--text2);width:40%;border-bottom:0.5px solid var(--border)">Supabase URL</td><td style="padding:8px 0;border-bottom:0.5px solid var(--border);font-family:monospace;font-size:12px">mpmtvydpiihfltldaxkt.supabase.co</td></tr>
+      <tr><td style="padding:8px 0;color:var(--text2);border-bottom:0.5px solid var(--border)">Aktiviteter</td><td style="padding:8px 0;border-bottom:0.5px solid var(--border)" id="count-activities">Laddar...</td></tr>
+      <tr><td style="padding:8px 0;color:var(--text2);border-bottom:0.5px solid var(--border)">Laps</td><td style="padding:8px 0;border-bottom:0.5px solid var(--border)" id="count-laps">Laddar...</td></tr>
+      <tr><td style="padding:8px 0;color:var(--text2)">Km-splits</td><td style="padding:8px 0" id="count-splits">Laddar...</td></tr>
+    </table>
+  </div>
+
+  <!-- SQL setup reminder -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Databasuppsättning</span></div>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:1rem">Om du inte kört SQL-migrationen för laps, km_splits och time_series-tabellerna, kör detta i Supabase SQL Editor:</p>
+    <pre style="font-size:12px;background:var(--surface2);padding:1rem;border-radius:var(--radius);overflow-x:auto;color:var(--text2);line-height:1.6"><code>create table if not exists laps (
+  id uuid default gen_random_uuid() primary key,
+  activity_id uuid references activities(id) on delete cascade,
+  lap_index integer,
+  start_time timestamptz,
+  distance_meters numeric,
+  duration_seconds numeric,
+  avg_hr integer,
+  max_hr integer,
+  avg_pace_sec_per_km numeric,
+  avg_cadence integer,
+  elevation_gain numeric,
+  calories integer,
+  lap_trigger text
+);
+
+create table if not exists km_splits (
+  id uuid default gen_random_uuid() primary key,
+  activity_id uuid references activities(id) on delete cascade,
+  km integer,
+  distance_meters numeric,
+  duration_seconds numeric,
+  pace_sec_per_km numeric,
+  avg_hr integer,
+  avg_cadence integer,
+  elevation_gain numeric,
+  partial boolean default false
+);
+
+create table if not exists time_series (
+  id uuid default gen_random_uuid() primary key,
+  activity_id uuid references activities(id) on delete cascade,
+  t numeric,
+  d numeric,
+  hr integer,
+  alt numeric,
+  speed numeric,
+  cadence integer
+);</code></pre>
+    <button class="btn" style="margin-top:1rem" onclick="copySQL()">Kopiera SQL</button>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="js/db.js"></script>
+<script>
+function renderZonePreview() {
+  const max = parseInt(document.getElementById('hr-max').value) || 190;
+  const zones = [
+    { num:1, name:'Z1 Återhämtning', pct:'<60%',  color:'#1d9e75' },
+    { num:2, name:'Z2 Aerob bas',    pct:'60–70%', color:'#185FA5' },
+    { num:3, name:'Z3 Tempo',        pct:'70–80%', color:'#ba7517' },
+    { num:4, name:'Z4 Tröskel',      pct:'80–90%', color:'#d85a30' },
+    { num:5, name:'Z5 Max',          pct:'90–100%',color:'#e24b4a' }
+  ];
+  const thresholds = [0, 0.60, 0.70, 0.80, 0.90, 1.0];
+  document.getElementById('zone-preview').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+      ${zones.map((z,i) => `
+        <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center">
+          <span class="zone-badge z${z.num}" style="margin-bottom:6px;display:inline-block">Z${z.num}</span>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:2px">${z.name.split(' ').slice(1).join(' ')}</div>
+          <div style="font-size:13px;font-weight:500">${Math.round(thresholds[i]*max)}–${i<4?Math.round(thresholds[i+1]*max):max} bpm</div>
+          <div style="font-size:11px;color:var(--text3)">${z.pct}</div>
+        </div>`).join('')}
+    </div>`;
+}
+
+document.getElementById('hr-max').addEventListener('input', renderZonePreview);
+
+function saveSettings() {
+  const max = document.getElementById('hr-max').value;
+  localStorage.setItem('hr_max', max);
+  document.getElementById('save-msg').textContent = 'Sparat!';
+  setTimeout(() => document.getElementById('save-msg').textContent = '', 2000);
+  renderZonePreview();
+}
+
+function copySQL() {
+  const sql = document.querySelector('code').textContent;
+  navigator.clipboard.writeText(sql).then(() => toast('SQL kopierat!'));
+}
+
+async function loadCounts() {
+  try {
+    const [a, l, s] = await Promise.all([
+      dbQuery('activities?select=id&limit=1', { headers:{'Prefer':'count=exact','Range':'0-0'} }),
+      dbQuery('laps?select=id&limit=1', { headers:{'Prefer':'count=exact','Range':'0-0'} }).catch(()=>null),
+      dbQuery('km_splits?select=id&limit=1', { headers:{'Prefer':'count=exact','Range':'0-0'} }).catch(()=>null)
+    ]);
+    document.getElementById('count-activities').textContent = Array.isArray(a) ? a.length + ' laddade' : '–';
+    document.getElementById('count-laps').textContent = l ? 'Tabell finns' : 'Tabell saknas – kör SQL ovan';
+    document.getElementById('count-splits').textContent = s ? 'Tabell finns' : 'Tabell saknas – kör SQL ovan';
+  } catch(e) {}
+}
+
+// Load saved settings
+document.getElementById('hr-max').value = localStorage.getItem('hr_max') || '190';
+renderZonePreview();
+loadCounts();
+</script>
+</body>
+</html>

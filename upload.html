@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ladda upp – Träningsdashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <span class="nav-brand">Träningsdashboard</span>
+    <div class="nav-links">
+      <a href="index.html">Översikt</a>
+      <a href="upload.html" class="active">Ladda upp</a>
+      <a href="settings.html">Inställningar</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>Ladda upp pass</h1>
+    <p>Exportera FIT-fil från Garmin Connect och ladda upp här</p>
+  </div>
+
+  <!-- Instructions -->
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="card-header"><span class="card-title">Hur exporterar du från Garmin Connect</span></div>
+    <ol style="font-size:14px;color:var(--text2);line-height:2;padding-left:1.25rem">
+      <li>Gå till <strong style="color:var(--text)">connect.garmin.com</strong> och logga in</li>
+      <li>Klicka på <strong style="color:var(--text)">Aktiviteter</strong> och välj ett pass</li>
+      <li>Klicka på <strong style="color:var(--text)">kugghjulet (⚙)</strong> uppe till höger på pass-sidan</li>
+      <li>Välj <strong style="color:var(--text)">Exportera original</strong> → sparar en <code>.fit</code>-fil</li>
+      <li>Dra och släpp filen i rutan nedan</li>
+    </ol>
+  </div>
+
+  <!-- Drop zone -->
+  <div class="card">
+    <div class="upload-zone" id="drop-zone" onclick="document.getElementById('fit-input').click()">
+      <div class="upload-icon">↑</div>
+      <div class="upload-title">Dra och släpp FIT-fil här</div>
+      <div class="upload-sub">Eller klicka för att välja fil · .fit, .gpx, .tcx</div>
+      <input type="file" id="fit-input" accept=".fit,.gpx,.tcx" style="display:none" onchange="handleFile(this.files[0])">
+    </div>
+
+    <!-- Progress / preview -->
+    <div id="upload-state" style="display:none;margin-top:1rem">
+      <div id="progress-msg" style="font-size:14px;color:var(--text2);margin-bottom:1rem"></div>
+      <div id="preview-content"></div>
+      <div id="upload-actions" style="display:none;margin-top:1rem;display:flex;gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- Manual entry -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Manuell inmatning</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Datum</label><input type="date" id="f-date" style="width:100%"></div>
+      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Typ</label>
+        <select id="f-type" style="width:100%;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px">
+          <option value="running">Löpning</option>
+          <option value="strength">Styrketräning</option>
+          <option value="hiking">Vandring</option>
+        </select>
+      </div>
+      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Distans (km)</label><input type="number" id="f-dist" step="0.01" placeholder="0.00" style="width:100%"></div>
+      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Tid (mm:ss eller minuter)</label><input type="text" id="f-dur" placeholder="45:30" style="width:100%"></div>
+      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Snitt-HR (bpm)</label><input type="number" id="f-hr" placeholder="150" style="width:100%"></div>
+      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Max-HR (bpm)</label><input type="number" id="f-maxhr" placeholder="175" style="width:100%"></div>
+      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Kadens (spm)</label><input type="number" id="f-cad" placeholder="170" style="width:100%"></div>
+      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Höjdmeter (m)</label><input type="number" id="f-elev" placeholder="0" style="width:100%"></div>
+    </div>
+    <div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Notat</label><textarea id="f-notes" placeholder="Hur kändes passet?" style="width:100%;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px;min-height:60px;resize:vertical"></textarea></div>
+    <button class="btn btn-primary" onclick="saveManual()">Spara pass</button>
+    <span id="manual-status" style="font-size:13px;color:var(--text2);margin-left:8px"></span>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/fit-file-parser@1.10.0/dist/fit-file-parser.min.js"></script>
+<script src="js/db.js"></script>
+<script src="js/fit-parser.js"></script>
+<script>
+document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
+
+// Drag and drop
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+
+let parsedData = null;
+
+async function handleFile(file) {
+  if (!file) return;
+  const state = document.getElementById('upload-state');
+  const msg = document.getElementById('progress-msg');
+  const preview = document.getElementById('preview-content');
+  const actions = document.getElementById('upload-actions');
+
+  state.style.display = 'block';
+  actions.style.display = 'none';
+  msg.textContent = `Läser ${file.name}...`;
+  preview.innerHTML = '';
+
+  try {
+    if (file.name.endsWith('.fit')) {
+      parsedData = await parseFitFile(file);
+    } else {
+      msg.textContent = 'GPX/TCX-stöd kommer snart. Använd FIT-format för bäst resultat.';
+      return;
+    }
+
+    const { summary, laps, kmSplits, hrZones } = parsedData;
+    const pace = summary.duration_seconds && summary.distance_meters
+      ? fmtPace(summary.duration_seconds / (summary.distance_meters / 1000)) : '–';
+
+    msg.textContent = `Pass inläst – ${fmtDate(summary.activity_date)} · ${typeLabel(summary.activity_type)}`;
+
+    preview.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem">
+        <div class="metric"><div class="metric-label">Distans</div><div class="metric-value" style="font-size:18px">${summary.distance_meters ? (summary.distance_meters/1000).toFixed(2)+' km' : '–'}</div></div>
+        <div class="metric"><div class="metric-label">Tid</div><div class="metric-value" style="font-size:18px">${fmtDuration(summary.duration_seconds)}</div></div>
+        <div class="metric"><div class="metric-label">Pace</div><div class="metric-value" style="font-size:18px">${pace}/km</div></div>
+        <div class="metric"><div class="metric-label">Snitt HR</div><div class="metric-value" style="font-size:18px">${summary.avg_hr||'–'} bpm</div></div>
+      </div>
+      <div style="font-size:13px;color:var(--text2)">
+        ${laps.length} laps · ${kmSplits.length} km-splits · ${parsedData.timeSeries.length} tidpunkter
+        ${summary.elevation_gain_meters ? ` · +${Math.round(summary.elevation_gain_meters)} m` : ''}
+      </div>
+    `;
+
+    actions.style.display = 'flex';
+    actions.innerHTML = `
+      <button class="btn btn-primary" onclick="saveActivity()">Spara till dashboard</button>
+      <button class="btn" onclick="document.getElementById('upload-state').style.display='none'">Avbryt</button>
+    `;
+  } catch(e) {
+    msg.textContent = `Fel vid inläsning: ${e.message}`;
+    console.error(e);
+  }
+}
+
+async function saveActivity() {
+  if (!parsedData) return;
+  const { summary, laps, kmSplits, timeSeries } = parsedData;
+  const btn = document.querySelector('#upload-actions .btn-primary');
+  btn.textContent = 'Sparar...';
+  btn.disabled = true;
+
+  try {
+    // Save activity
+    const [saved] = await dbInsert('activities', summary);
+    const actId = saved.id;
+
+    // Save laps
+    if (laps.length) {
+      await dbInsert('laps', laps.map(l => ({ ...l, activity_id: actId })));
+    }
+
+    // Save km splits
+    if (kmSplits.length) {
+      await dbInsert('km_splits', kmSplits.map(s => ({ ...s, activity_id: actId })));
+    }
+
+    // Save time series (downsample to ~500 points to keep DB lean)
+    if (timeSeries.length) {
+      const step = Math.max(1, Math.floor(timeSeries.length / 500));
+      const sampled = timeSeries.filter((_, i) => i % step === 0);
+      await dbInsert('time_series', sampled.map(p => ({ ...p, activity_id: actId })));
+    }
+
+    toast('Pass sparat! ');
+    setTimeout(() => location.href = `activity.html?id=${actId}`, 1000);
+  } catch(e) {
+    toast('Fel: ' + e.message);
+    btn.textContent = 'Spara till dashboard';
+    btn.disabled = false;
+    console.error(e);
+  }
+}
+
+function parseManualDuration(s) {
+  if (!s) return null;
+  const parts = s.split(':');
+  if (parts.length === 2) return parseInt(parts[0])*60 + parseInt(parts[1]);
+  if (parts.length === 3) return parseInt(parts[0])*3600 + parseInt(parts[1])*60 + parseInt(parts[2]);
+  return parseInt(s)*60;
+}
+
+async function saveManual() {
+  const d = {
+    activity_date: document.getElementById('f-date').value,
+    activity_type: document.getElementById('f-type').value,
+    distance_meters: +document.getElementById('f-dist').value * 1000 || null,
+    duration_seconds: parseManualDuration(document.getElementById('f-dur').value),
+    avg_hr: +document.getElementById('f-hr').value || null,
+    max_hr: +document.getElementById('f-maxhr').value || null,
+    avg_cadence: +document.getElementById('f-cad').value || null,
+    elevation_gain_meters: +document.getElementById('f-elev').value || null,
+    notes: document.getElementById('f-notes').value || null
+  };
+  if (!d.activity_date) { toast('Ange datum'); return; }
+  try {
+    const [saved] = await dbInsert('activities', d);
+    toast('Pass sparat!');
+    setTimeout(() => location.href = `activity.html?id=${saved.id}`, 1000);
+  } catch(e) { toast('Fel: ' + e.message); }
+}
+</script>
+</body>
+</html>
