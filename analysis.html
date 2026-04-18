@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analys – Träningsdashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <span class="nav-brand">Träningsdashboard</span>
+    <div class="nav-links">
+      <a href="index.html">Översikt</a>
+      <a href="analysis.html" class="active">Analys</a>
+      <a href="upload.html">Ladda upp</a>
+      <a href="settings.html">Inställningar</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>Analys</h1>
+    <p id="conn-label"><span class="status-dot status-loading" id="conn-dot"></span><span id="conn-text">Ansluter...</span></p>
+  </div>
+
+  <!-- ── 1. Monthly volume ─────────────────────────────────── -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="card-header">
+      <span class="card-title">Månadsvolym – löpning</span>
+      <span id="vol-summary" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+    <p class="chart-desc">Staplar = km per månad. Den gröna linjen är ett rullande 3-månaders snitt som jämnar ut säsongsvariationer och visar den underliggande trenden.</p>
+    <div style="position:relative;height:220px">
+      <canvas id="chart-monthly"></canvas>
+    </div>
+  </div>
+
+  <!-- ── 2. EF + Z2 side by side ──────────────────────────── -->
+  <div class="chart-row" style="margin-bottom:1rem">
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Aerob effektivitetsfaktor (EF)</span>
+      </div>
+      <p class="chart-desc">EF&nbsp;= fart&nbsp;(m/min)&nbsp;÷&nbsp;snittpuls. Mäter hur effektivt hjärtat arbetar. Stigande trend = bättre kondition. Den mörka linjen är 6-pass rullande snitt.</p>
+      <div style="position:relative;height:200px">
+        <canvas id="chart-ef"></canvas>
+      </div>
+      <div id="ef-empty" class="empty" style="height:200px;display:none;flex-direction:column;align-items:center;justify-content:center"><div class="empty-icon">◎</div>Behöver pulsdata</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Z2-tempoutveckling</span>
+      </div>
+      <p class="chart-desc" id="z2-desc">Pace på pass där snittpulsen låg i Z2. Sjunkande linje = du springer snabbare vid samma ansträngning = förbättrad aerob bas.</p>
+      <div style="position:relative;height:200px">
+        <canvas id="chart-z2"></canvas>
+      </div>
+      <div id="z2-empty" class="empty" style="height:200px;display:none;flex-direction:column;align-items:center;justify-content:center"><div class="empty-icon">◎</div>Inga Z2-pass hittades</div>
+    </div>
+
+  </div>
+
+  <!-- ── 3. Pace vs HR scatter ──────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Pace vs puls – alla löppass</span>
+    </div>
+    <p class="chart-desc">Varje punkt är ett pass. Rörelser mot lägre puls (vänster) eller snabbare pace (nedåt) visar förbättrad kondition. Färg visar år.</p>
+    <div style="position:relative;height:280px">
+      <canvas id="chart-scatter"></canvas>
+    </div>
+    <div id="scatter-legend" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--text2)"></div>
+  </div>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<style>
+.chart-desc {
+  font-size: 12px;
+  color: var(--text3);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="js/db.js"></script>
+<script>
+let charts = {};
+
+async function init() {
+  try {
+    const allActs = await dbQuery('activities?order=activity_date.asc&limit=2000');
+    setConnected(true);
+    const runs = allActs.filter(a => a.activity_type === 'running');
+    if (runs.length) renderCharts(runs);
+  } catch(e) {
+    setConnected(false);
+    console.error(e);
+  }
+}
+
+function setConnected(ok) {
+  document.getElementById('conn-dot').className = 'status-dot ' + (ok ? 'status-ok' : 'status-err');
+  document.getElementById('conn-text').textContent = ok ? 'Ansluten till Supabase' : 'Anslutningsfel';
+}
+
+// Simple moving average over last n values, ignoring nulls
+function movingAvg(arr, n) {
+  return arr.map((_, i) => {
+    const slice = arr.slice(Math.max(0, i - n + 1), i + 1).filter(v => v != null && !isNaN(v));
+    if (!slice.length) return null;
+    return +(slice.reduce((a, b) => a + b, 0) / slice.length).toFixed(3);
+  });
+}
+
+// Linear regression trend line
+function trendLine(vals) {
+  const n = vals.length;
+  if (n < 2) return vals.map(() => null);
+  const xs = vals.map((_, i) => i);
+  const meanX = xs.reduce((a, b) => a + b, 0) / n;
+  const meanY = vals.reduce((a, b) => a + b, 0) / n;
+  const slope = xs.reduce((s, x, i) => s + (x - meanX) * (vals[i] - meanY), 0) /
+                xs.reduce((s, x) => s + (x - meanX) ** 2, 0);
+  const intercept = meanY - slope * meanX;
+  return xs.map(x => +(slope * x + intercept).toFixed(3));
+}
+
+function renderCharts(runs) {
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+
+  // ── 1. Monthly volume ──────────────────────────────────────────
+  const months = {};
+  runs.forEach(a => {
+    const k = a.activity_date.slice(0, 7); // YYYY-MM
+    months[k] = (months[k] || 0) + (a.distance_meters || 0) / 1000;
+  });
+  const mkeys = Object.keys(months).sort();
+  const mVals = mkeys.map(k => +months[k].toFixed(1));
+  const rolling3m = movingAvg(mVals, 3);
+
+  // Summary: best month, current 3m avg
+  const bestIdx = mVals.indexOf(Math.max(...mVals));
+  const cur3m = rolling3m[rolling3m.length - 1];
+  document.getElementById('vol-summary').textContent =
+    `Bästa månad: ${mVals[bestIdx]} km (${mkeys[bestIdx]})  ·  3-mån snitt nu: ${cur3m} km`;
+
+  charts.monthly = new Chart(document.getElementById('chart-monthly'), {
+    type: 'bar',
+    data: {
+      labels: mkeys.map(k => {
+        const [y, m] = k.split('-');
+        return new Date(+y, +m - 1).toLocaleDateString('sv-SE', { month: 'short', year: '2-digit' });
+      }),
+      datasets: [
+        {
+          type: 'bar',
+          label: 'km/månad',
+          data: mVals,
+          backgroundColor: 'rgba(24,95,165,0.45)',
+          borderRadius: 3,
+          order: 2
+        },
+        {
+          type: 'line',
+          label: '3-mån snitt',
+          data: rolling3m,
+          borderColor: '#1d9e75',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.4,
+          order: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          labels: { font: { size: 11 }, boxWidth: 12, padding: 16 }
+        },
+        tooltip: {
+          callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.raw + ' km' }
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(128,128,128,0.08)' }, ticks: { font: { size: 11 } } },
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 10 }, autoSkip: true, maxRotation: 45, maxTicksLimit: 30 }
+        }
+      }
+    }
+  });
+
+  // ── 2. Aerobic Efficiency Factor ───────────────────────────────
+  const efRuns = runs.filter(a =>
+    a.avg_hr > 0 &&
+    (a.distance_meters || 0) > 2000 &&
+    a.duration_seconds
+  );
+
+  if (efRuns.length >= 3) {
+    const efData = efRuns.map(a => {
+      const speed = a.avg_speed_ms || (a.distance_meters / a.duration_seconds);
+      return { date: a.activity_date, ef: +(speed * 60 / a.avg_hr).toFixed(3) };
+    });
+    const efLabels = efData.map(d => d.date.slice(5));
+    const efVals = efData.map(d => d.ef);
+    const efSmooth = movingAvg(efVals, 6);
+    const efTrend = trendLine(efVals);
+
+    charts.ef = new Chart(document.getElementById('chart-ef'), {
+      type: 'line',
+      data: {
+        labels: efLabels,
+        datasets: [
+          {
+            label: 'EF',
+            data: efVals,
+            borderColor: 'rgba(24,95,165,0.25)',
+            backgroundColor: 'transparent',
+            pointRadius: 3,
+            pointBackgroundColor: 'rgba(24,95,165,0.45)',
+            borderWidth: 1,
+            tension: 0.1,
+            order: 3
+          },
+          {
+            label: '6-pass snitt',
+            data: efSmooth,
+            borderColor: '#185FA5',
+            backgroundColor: 'transparent',
+            pointRadius: 0,
+            borderWidth: 2,
+            tension: 0.4,
+            order: 2
+          },
+          {
+            label: 'Trend',
+            data: efTrend,
+            borderColor: 'rgba(186,117,23,0.6)',
+            backgroundColor: 'transparent',
+            borderDash: [4, 4],
+            pointRadius: 0,
+            borderWidth: 1.5,
+            tension: 0,
+            order: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => efData[items[0].dataIndex]?.date || '',
+              label: ctx => {
+                if (ctx.dataset.label === 'EF') return 'EF: ' + ctx.raw;
+                if (ctx.dataset.label === '6-pass snitt') return 'Snitt: ' + ctx.raw;
+                return null;
+              }
+            },
+            filter: item => item.dataset.label !== 'Trend'
+          }
+        },
+        scales: {
+          y: { grid: { color: 'rgba(128,128,128,0.08)' }, ticks: { font: { size: 11 } } },
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 11 }, autoSkip: true, maxRotation: 0, maxTicksLimit: 8 }
+          }
+        }
+      }
+    });
+  } else {
+    document.getElementById('chart-ef').style.display = 'none';
+    const el = document.getElementById('ef-empty');
+    el.style.display = 'flex';
+  }
+
+  // ── 3. Z2 pace trend ──────────────────────────────────────────
+  const { zones } = getHRConfig();
+  const z2 = zones[1]; // Z2: 60–70% of max HR
+  document.getElementById('z2-desc').textContent =
+    `Pace på pass där snittpulsen låg i Z2 (${Math.round(z2.min)}–${Math.round(z2.max)} bpm). ` +
+    'Sjunkande linje = du springer snabbare vid samma ansträngning = förbättrad aerob bas.';
+
+  const z2Runs = runs.filter(a =>
+    a.avg_hr >= z2.min && a.avg_hr < z2.max &&
+    (a.distance_meters || 0) > 2000 && a.duration_seconds
+  );
+
+  if (z2Runs.length >= 3) {
+    const z2Vals = z2Runs.map(a => +(a.duration_seconds / (a.distance_meters / 1000)).toFixed(1));
+    const z2Labels = z2Runs.map(a => a.activity_date.slice(5));
+    const z2Smooth = movingAvg(z2Vals, 5);
+    const z2Trend = trendLine(z2Vals);
+
+    charts.z2 = new Chart(document.getElementById('chart-z2'), {
+      type: 'line',
+      data: {
+        labels: z2Labels,
+        datasets: [
+          {
+            label: 'Pace',
+            data: z2Vals,
+            borderColor: 'rgba(29,158,117,0.25)',
+            backgroundColor: 'transparent',
+            pointRadius: 3,
+            pointBackgroundColor: 'rgba(29,158,117,0.45)',
+            borderWidth: 1,
+            tension: 0.1,
+            order: 3
+          },
+          {
+            label: '5-pass snitt',
+            data: z2Smooth,
+            borderColor: '#1d9e75',
+            backgroundColor: 'transparent',
+            pointRadius: 0,
+            borderWidth: 2,
+            tension: 0.4,
+            order: 2
+          },
+          {
+            label: 'Trend',
+            data: z2Trend,
+            borderColor: 'rgba(186,117,23,0.6)',
+            backgroundColor: 'transparent',
+            borderDash: [4, 4],
+            pointRadius: 0,
+            borderWidth: 1.5,
+            tension: 0,
+            order: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => z2Runs[items[0].dataIndex]?.activity_date || '',
+              label: ctx => {
+                if (ctx.dataset.label === 'Pace') return 'Pace: ' + fmtPace(ctx.raw) + '/km';
+                if (ctx.dataset.label === '5-pass snitt') return 'Snitt: ' + fmtPace(ctx.raw) + '/km';
+                return null;
+              }
+            },
+            filter: item => item.dataset.label !== 'Trend'
+          }
+        },
+        scales: {
+          y: {
+            reverse: true,
+            grid: { color: 'rgba(128,128,128,0.08)' },
+            ticks: { font: { size: 11 }, callback: v => fmtPace(v) }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 11 }, autoSkip: true, maxRotation: 0, maxTicksLimit: 8 }
+          }
+        }
+      }
+    });
+  } else {
+    document.getElementById('chart-z2').style.display = 'none';
+    const el = document.getElementById('z2-empty');
+    el.style.display = 'flex';
+  }
+
+  // ── 4. Pace vs HR scatter ──────────────────────────────────────
+  const scatterRuns = runs.filter(a =>
+    a.avg_hr > 0 &&
+    (a.distance_meters || 0) > 2000 &&
+    a.duration_seconds
+  );
+
+  const years = [...new Set(scatterRuns.map(a => a.activity_date.slice(0, 4)))].sort();
+
+  // Color palette: older years = muted blue, recent = warm colors
+  const palette = ['#a0b4cc', '#6698c7', '#185FA5', '#1d9e75', '#ba7517', '#d85a30', '#e24b4a'];
+  const yearColor = (i) => palette[Math.max(0, palette.length - years.length + i)];
+
+  charts.scatter = new Chart(document.getElementById('chart-scatter'), {
+    type: 'scatter',
+    data: {
+      datasets: years.map((y, i) => ({
+        label: y,
+        data: scatterRuns
+          .filter(a => a.activity_date.startsWith(y))
+          .map(a => ({
+            x: a.avg_hr,
+            y: +(a.duration_seconds / (a.distance_meters / 1000)).toFixed(1),
+            dist: (a.distance_meters / 1000).toFixed(1),
+            date: a.activity_date
+          })),
+        backgroundColor: yearColor(i) + 'bb',
+        pointRadius: 5,
+        pointHoverRadius: 7
+      }))
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const d = ctx.raw;
+              return [`${d.date}`, `Puls: ${d.x} bpm`, `Pace: ${fmtPace(d.y)}/km`, `${d.dist} km`];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Snittpuls (bpm)', font: { size: 11 }, color: 'var(--text3)' },
+          grid: { color: 'rgba(128,128,128,0.08)' },
+          ticks: { font: { size: 11 } }
+        },
+        y: {
+          reverse: true,
+          title: { display: true, text: 'Pace (min/km)', font: { size: 11 }, color: 'var(--text3)' },
+          grid: { color: 'rgba(128,128,128,0.08)' },
+          ticks: { font: { size: 11 }, callback: v => fmtPace(v) }
+        }
+      }
+    }
+  });
+
+  // Legend
+  document.getElementById('scatter-legend').innerHTML = years.map((y, i) =>
+    `<div style="display:flex;align-items:center;gap:5px">
+      <span style="width:10px;height:10px;border-radius:50%;background:${yearColor(i)};flex-shrink:0"></span>${y}
+    </div>`
+  ).join('');
+}
+
+init();
+</script>
+</body>
+</html>
