@@ -29,7 +29,7 @@
   <!-- ── 1. Heatmap ─────────────────────────────────────────── -->
   <div class="card" style="margin-bottom:1rem">
     <div class="card-header">
-      <span class="card-title">Träningskonsekvens – senaste 52 veckor</span>
+      <span class="card-title">Träningskonsekvens – senaste 26 veckor</span>
       <span id="heatmap-summary" style="font-size:12px;color:var(--text3)"></span>
     </div>
     <p class="chart-desc">Varje ruta = en dag. Blå = löpning (mörkare = längre pass), lila = styrka, grön = vandring. Konsekvens över tid är den starkaste indikatorn på långsiktig förbättring.</p>
@@ -106,6 +106,7 @@
         <canvas id="chart-ef"></canvas>
       </div>
       <div id="ef-empty" class="empty" style="height:200px;display:none;flex-direction:column;align-items:center;justify-content:center"><div class="empty-icon">◎</div>Behöver pulsdata</div>
+      <div id="ef-projection" style="margin-top:12px;padding:10px 14px;border-radius:var(--radius-sm);background:var(--surface2);font-size:13px;line-height:1.5;display:none"></div>
       <div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--text3);flex-wrap:wrap">
         <span>Referenslinjen beräknas som 250 m/min ÷ (maxpuls × 91 %). Ändra maxpuls under <a href="settings.html" style="color:var(--text2)">Inställningar</a>.</span>
       </div>
@@ -205,7 +206,7 @@ function renderHeatmap(acts) {
   // Start: Monday 52 weeks ago
   const today = new Date(); today.setHours(12, 0, 0, 0);
   const start = new Date(today);
-  start.setDate(today.getDate() - 52 * 7);
+  start.setDate(today.getDate() - 26 * 7);
   start.setDate(start.getDate() - ((start.getDay() + 6) % 7)); // align to Monday
 
   // Build day list
@@ -489,6 +490,49 @@ function renderCharts(runs) {
         }
       }
     });
+    // ── Projection ────────────────────────────────────────────────
+    const projEl = document.getElementById('ef-projection');
+    projEl.style.display = 'block';
+
+    if (ne >= 6) {
+      // Recalculate slope/intercept cleanly
+      const meanX = (ne - 1) / 2;
+      const meanY = efVals.reduce((a,b) => a+b, 0) / ne;
+      const denom = efVals.reduce((s,_,i) => s + (i - meanX)**2, 0);
+      const slope = denom ? efVals.reduce((s,v,i) => s + (i - meanX)*(v - meanY), 0) / denom : 0;
+      const intercept = meanY - slope * meanX;
+
+      if (slope <= 0.0005) {
+        projEl.innerHTML = `<span style="color:var(--text3)">📉 Trenden är för svag eller sjunkande för att ge en prognos. Mer konsekvent lågintensiv träning brukar vända kurvan.</span>`;
+      } else {
+        const iTarget = (sub40ref - intercept) / slope;
+        const runsLeft = iTarget - (ne - 1);
+
+        if (runsLeft <= 0) {
+          projEl.innerHTML = `<span style="color:#1d9e75">✓ Du är redan på eller över sub-40-målnivån (${sub40ref} m/slag). Håll kursen!</span>`;
+        } else {
+          // Average days per run based on actual data span
+          const firstDate = new Date(efRuns[0].activity_date);
+          const lastDate  = new Date(efRuns[ne - 1].activity_date);
+          const spanDays  = Math.max(1, (lastDate - firstDate) / 86400000);
+          const avgDaysPerRun = spanDays / (ne - 1);
+          const daysLeft  = Math.round(runsLeft * avgDaysPerRun);
+          const weeksLeft = Math.round(daysLeft / 7);
+
+          if (daysLeft > 365 * 4) {
+            projEl.innerHTML = `<span style="color:var(--text3)">📈 Trenden pekar åt rätt håll men är än så länge för svag för en tillförlitlig tidsangivelse. Fortsätt bygga volym.</span>`;
+          } else {
+            const projDate = new Date();
+            projDate.setDate(projDate.getDate() + daysLeft);
+            const projStr = projDate.toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' });
+            projEl.innerHTML = `🎯 Med nuvarande trend når du sub-40-målnivån (<strong>${sub40ref} m/slag</strong>) om ca <strong>${weeksLeft} veckor</strong> — runt <strong>${projStr}</strong>.`;
+          }
+        }
+      }
+    } else {
+      projEl.innerHTML = `<span style="color:var(--text3)">Behöver fler pass med pulsdata för att beräkna en prognos.</span>`;
+    }
+
   } else {
     document.getElementById('chart-ef').style.display = 'none';
     document.getElementById('ef-empty').style.display = 'flex';
