@@ -44,7 +44,7 @@
     <div class="metric"><div class="metric-label">Total distans</div><div class="metric-value" id="m-dist">–</div><div class="metric-sub" id="m-dist-sub"></div></div>
     <div class="metric"><div class="metric-label">Antal löppass</div><div class="metric-value" id="m-runs">–</div><div class="metric-sub" id="m-runs-sub"></div></div>
     <div class="metric"><div class="metric-label">Snitt puls (löpning)</div><div class="metric-value" id="m-hr">–<span class="metric-unit"> bpm</span></div><div class="metric-sub">senaste 10 pass</div></div>
-    <div class="metric"><div class="metric-label">Längsta pass</div><div class="metric-value" id="m-longest">–</div><div class="metric-sub" id="m-longest-sub"></div></div>
+    <div class="metric"><div class="metric-label">Meter / hjärtslag</div><div class="metric-value" id="m-mps">–<span class="metric-unit" id="m-mps-trend"></span></div><div class="metric-sub">senaste 10 pass · <span id="m-mps-sub"></span></div></div>
   </div>
 
   <!-- Charts -->
@@ -196,9 +196,22 @@ function render() {
   const hrArr = runs.filter(a => a.avg_hr).slice(0, 10).map(a => a.avg_hr);
   document.getElementById('m-hr').innerHTML = hrArr.length ? Math.round(hrArr.reduce((a,b)=>a+b)/hrArr.length) + '<span class="metric-unit"> bpm</span>' : '–';
 
-  const longest = runs.reduce((max, a) => (!max || a.distance_meters > max.distance_meters) ? a : max, null);
-  document.getElementById('m-longest').textContent = longest ? (longest.distance_meters/1000).toFixed(1) + ' km' : '–';
-  document.getElementById('m-longest-sub').textContent = longest ? fmtDate(longest.activity_date) : '';
+  // Meter per heartbeat (= EF): speed_m_per_s * 60 / avg_hr
+  const mpsRuns = runs.filter(a => a.avg_hr > 0 && (a.distance_meters||0) > 2000 && a.duration_seconds);
+  if (mpsRuns.length >= 2) {
+    const calcMps = a => { const sp = a.avg_speed_ms || (a.distance_meters / a.duration_seconds); return +(sp * 60 / a.avg_hr).toFixed(3); };
+    const recent = mpsRuns.slice(0, 10).map(calcMps);
+    const older  = mpsRuns.slice(10, 20).map(calcMps);
+    const avg    = v => v.reduce((a,b)=>a+b,0) / v.length;
+    const curAvg = +avg(recent).toFixed(2);
+    const trend  = older.length >= 3 ? curAvg - +avg(older).toFixed(2) : null;
+    const trendStr = trend == null ? '' : trend > 0.03 ? ' ↑' : trend < -0.03 ? ' ↓' : ' →';
+    const trendCol = trend == null ? '' : trend > 0.03 ? 'color:#1d9e75' : trend < -0.03 ? 'color:#e24b4a' : 'color:var(--text3)';
+    const level = curAvg >= 1.8 ? 'Löparnivå' : curAvg >= 1.6 ? 'Vältränad' : curAvg >= 1.4 ? 'Bas' : 'Under bas';
+    document.getElementById('m-mps').childNodes[0].textContent = curAvg;
+    document.getElementById('m-mps-trend').innerHTML = `<span style="font-size:16px;${trendCol}">${trendStr}</span>`;
+    document.getElementById('m-mps-sub').textContent = level;
+  }
 
   renderCharts(acts, runs);
   renderList();
