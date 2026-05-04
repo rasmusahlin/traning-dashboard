@@ -29,7 +29,7 @@
   <!-- ── 1. Heatmap ─────────────────────────────────────────── -->
   <div class="card" style="margin-bottom:1rem">
     <div class="card-header">
-      <span class="card-title">Träningskonsekvens – senaste 52 veckor</span>
+      <span class="card-title">Träningskonsekvens – senaste 26 veckor</span>
       <span id="heatmap-summary" style="font-size:12px;color:var(--text3)"></span>
     </div>
     <p class="chart-desc">Varje ruta = en dag. Blå = löpning (mörkare = längre pass), lila = styrka, grön = vandring. Konsekvens över tid är den starkaste indikatorn på långsiktig förbättring.</p>
@@ -205,7 +205,7 @@ function renderHeatmap(acts) {
   // Start: Monday 52 weeks ago
   const today = new Date(); today.setHours(12, 0, 0, 0);
   const start = new Date(today);
-  start.setDate(today.getDate() - 52 * 7);
+  start.setDate(today.getDate() - 26 * 7);
   start.setDate(start.getDate() - ((start.getDay() + 6) % 7)); // align to Monday
 
   // Build day list
