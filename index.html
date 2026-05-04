@@ -151,10 +151,15 @@ async function init() {
   try {
     allActivities = await dbQuery('activities?order=activity_date.desc&limit=1000');
     setConnected(true);
-    render();
   } catch(e) {
     setConnected(false);
-    console.error(e);
+    console.error('DB-fel:', e);
+    return;
+  }
+  try {
+    render();
+  } catch(e) {
+    console.error('Render-fel:', e);
   }
 }
 
