@@ -101,15 +101,13 @@
         <span class="card-title">Meter per hjärtslag</span>
         <span id="mps-current" style="font-size:12px;color:var(--text3)"></span>
       </div>
-      <p class="chart-desc">Hur långt du rör dig per hjärtslag — <strong>distans ÷ totala hjärtslag</strong>. Stiger kurvan förbättras hjärtats slagvolym och din aeroba kapacitet. Den streckade linjen visar linjär trend över tid.</p>
+      <p class="chart-desc">Hur långt du rör dig per hjärtslag — <strong>distans ÷ totala hjärtslag</strong>. Stiger kurvan förbättras hjärtats slagvolym och din aeroba kapacitet. Den gröna linjen visar vad du behöver hålla vid 91 % av maxpuls för att klara sub-40.</p>
       <div style="position:relative;height:200px">
         <canvas id="chart-ef"></canvas>
       </div>
       <div id="ef-empty" class="empty" style="height:200px;display:none;flex-direction:column;align-items:center;justify-content:center"><div class="empty-icon">◎</div>Behöver pulsdata</div>
       <div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--text3);flex-wrap:wrap">
-        <span>1.4 m/slag — bas</span>
-        <span style="color:#ba7517">1.6 m/slag — vältränad</span>
-        <span style="color:#185FA5">1.8 m/slag — god löpare</span>
+        <span>Referenslinjen beräknas som 250 m/min ÷ (maxpuls × 91 %). Ändra maxpuls under <a href="settings.html" style="color:var(--text2)">Inställningar</a>.</span>
       </div>
     </div>
 
@@ -453,19 +451,22 @@ function renderCharts(runs) {
     document.getElementById('mps-current').innerHTML =
       `Nu: <strong style="color:${mpsColor}">${mpsNow} m/slag${mpsArrow}</strong>${mpsDiff && mpsDiff !== 0 ? ` (${mpsDiff > 0 ? '+' : ''}${mpsDiff} vs tidigare)` : ''}`;
 
+    // Sub-40 reference: 4:00/km = 250 m/min at 91% of max HR
+    const { max: hrMax } = getHRConfig();
+    const sub40ref = +(250 / (hrMax * 0.91)).toFixed(3);
+    const sub40Label = `Sub-40 vid ${Math.round(hrMax * 0.91)} bpm (${sub40ref} m/slag)`;
+
     charts.ef = new Chart(document.getElementById('chart-ef'), {
       type: 'line',
       data: {
         labels: efLabels,
         datasets: [
-          // Reference lines
-          { data:refLine(1.4,ne), borderColor:'rgba(160,160,160,0.5)', borderDash:[4,4], borderWidth:1,   pointRadius:0, label:'1.4 m/slag – bas',        order:6 },
-          { data:refLine(1.6,ne), borderColor:'rgba(186,117,23,0.55)', borderDash:[4,4], borderWidth:1.5, pointRadius:0, label:'1.6 m/slag – vältränad',   order:5 },
-          { data:refLine(1.8,ne), borderColor:'rgba(24,95,165,0.55)',  borderDash:[4,4], borderWidth:1.5, pointRadius:0, label:'1.8 m/slag – god löpare',   order:4 },
+          // Sub-40 reference line
+          { data:refLine(sub40ref,ne), borderColor:'rgba(29,158,117,0.7)', borderDash:[6,4], borderWidth:1.5, pointRadius:0, label:sub40Label, order:4 },
           // Trend
-          { data:efTrend, borderColor:'rgba(186,117,23,0.5)', backgroundColor:'transparent', borderDash:[5,4], pointRadius:0, borderWidth:1.5, label:'Trend', order:3 },
+          { data:efTrend, borderColor:'rgba(186,117,23,0.45)', borderDash:[4,4], pointRadius:0, borderWidth:1.5, label:'Trend', order:3 },
           // Raw
-          { data:efVals,  borderColor:'rgba(24,95,165,0.25)', backgroundColor:'transparent', pointRadius:3, pointBackgroundColor:'rgba(24,95,165,0.45)', borderWidth:1, tension:0.1, label:'EF', order:2 },
+          { data:efVals,  borderColor:'rgba(24,95,165,0.25)', backgroundColor:'transparent', pointRadius:3, pointBackgroundColor:'rgba(24,95,165,0.45)', borderWidth:1, tension:0.1, label:'m/slag per pass', order:2 },
           // Smoothed
           { data:efSmooth, borderColor:'#185FA5', backgroundColor:'transparent', pointRadius:0, borderWidth:2, tension:0.4, label:'6-pass snitt', order:1 }
         ]
@@ -473,9 +474,9 @@ function renderCharts(runs) {
       options: {
         responsive:true, maintainAspectRatio:false,
         plugins: {
-          legend: { display:true, labels:{font:{size:10},boxWidth:10,padding:10, filter: item => [0,1,2].includes(item.datasetIndex)} },
+          legend: { display:true, labels:{font:{size:10},boxWidth:10,padding:10, filter: item => [0,3].includes(item.datasetIndex)} },
           tooltip: {
-            filter: item => ['EF','6-pass snitt'].includes(item.dataset.label),
+            filter: item => ['m/slag per pass','6-pass snitt'].includes(item.dataset.label),
             callbacks: {
               title: items => efData[items[0].dataIndex]?.date || '',
               label: ctx => ctx.dataset.label + ': ' + ctx.raw + ' m/slag'
