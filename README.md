@@ -45,3 +45,16 @@ Gå till ditt Supabase-projekt → SQL Editor och kör `schema.sql` (finns i det
 
 Ändra Supabase URL/nyckel i `js/db.js` om du byter projekt.
 Maxpuls och HR-zoner konfigureras under Inställningar och sparas i localStorage.
+
+## Säkerhet
+
+Dashboarden är byggd för GitHub Pages och använder Supabase direkt från webbläsaren. Den publika anon-nyckeln får synas i frontend, men databasen ska skyddas med Supabase Auth och Row Level Security.
+
+Rekommenderad ordning:
+
+1. Skapa/invitera användaren i Supabase Auth.
+2. Publicera frontend-versionen som kräver inloggning.
+3. Kör `supabase/migrations/001_owner_rls_auth.sql` i Supabase SQL Editor efter att ägarens e-post har kontrollerats i filen.
+4. Testa att dashboarden fungerar inloggad innan ändringen slås ihop till produktion.
+
+Kör inte RLS-migrationen på live-databasen innan inloggningen finns i frontend, annars kan den nuvarande appen inte längre läsa eller skriva träningsdata.
