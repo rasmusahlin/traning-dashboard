@@ -36,7 +36,7 @@
     <div class="metric">
       <div class="metric-label">Lugn andel</div>
       <div class="metric-value" id="m-easy-share">–</div>
-      <div class="metric-sub">senaste 8 veckor</div>
+      <div class="metric-sub">senaste 8 veckor · från laps</div>
     </div>
     <div class="metric">
       <div class="metric-label">Kvalitetspass</div>
@@ -177,14 +177,22 @@ function applyManualOverride(d) {
   const manualKey = classOverrides[d.activity.id];
   if (!manualKey || !classMeta[manualKey]) return d;
   const automatic = d.key;
+  const hasLapSplit = d.laps?.length >= 3 && Number.isFinite(d.easyDuration);
+  const easyDuration = ['easy','long'].includes(manualKey)
+    ? d.duration
+    : hasLapSplit
+      ? d.easyDuration
+      : 0;
+  const hardShare = d.duration ? Math.max(0, Math.min(1, 1 - (easyDuration / d.duration))) : d.hardShare;
   return {
     ...d,
     automaticKey: automatic,
     key: manualKey,
     confidence: 'Manuell',
     quality: ['threshold','vo2','progressive'].includes(manualKey),
-    easyDuration: ['easy','long'].includes(manualKey) ? d.duration : 0,
-    evidence: `Manuellt klassad som ${classMeta[manualKey].label}. Auto var ${classMeta[automatic]?.label || automatic}.`
+    easyDuration,
+    hardShare,
+    evidence: `Manuellt klassad som ${classMeta[manualKey].label}. Lugn/hård tid räknas fortfarande från laps när de finns. Auto var ${classMeta[automatic]?.label || automatic}.`
   };
 }
 
@@ -301,7 +309,13 @@ function classifyRun(activity, activityLaps, zones) {
   const distanceKm = (activity.distance_meters || laps.reduce((s,l)=>s+l.distance_meters,0)) / 1000;
   if (laps.length < 3) {
     const fallback = classifyFromSummary(activity, zones);
-    return { activity, laps, duration, distanceKm, hardShare:0, quality:false, ...fallback };
+    const easyDuration = ['easy','long'].includes(fallback.key) ? duration : 0;
+    const hardShare = duration ? Math.max(0, Math.min(1, 1 - (easyDuration / duration))) : 0;
+    return {
+      activity, laps, duration, distanceKm, hardShare, easyDuration,
+      quality: ['threshold','vo2','progressive'].includes(fallback.key),
+      ...fallback
+    };
   }
 
   const medianPace = median(laps.map(l => l.pace_sec_per_km));
@@ -509,11 +523,13 @@ function renderDiagnosisList(items) {
     ).join('');
     const manual = !!classOverrides[d.activity.id];
     const badgeTitle = manual ? `${meta.label} · manuell` : meta.label;
+    const easyShare = d.duration ? d.easyDuration / d.duration : 0;
+    const loadText = d.duration ? `Belastning: ${pct(d.hardShare || 0)} hårt, ${pct(easyShare)} lugnt.` : '';
     return `<div class="activity-item diagnosis-item">
       <span class="class-badge ${meta.badge}">${meta.label}</span>
       <div class="activity-main">
         <div class="activity-name">${fmtDate(d.activity.activity_date)} · ${dist} · ${dur}</div>
-        <div class="activity-meta">${escapeHtml(d.evidence)} Säkerhet: ${d.confidence}.${manual ? ' Manuell override används i grafer och planering.' : ''}</div>
+        <div class="activity-meta">${escapeHtml(d.evidence)} ${loadText} Säkerhet: ${d.confidence}.${manual ? ' Manuell override används i grafer och planering.' : ''}</div>
       </div>
       <div class="activity-right">
         <div class="activity-dist">${d.activity.avg_hr ? d.activity.avg_hr + ' bpm' : '–'}</div>
