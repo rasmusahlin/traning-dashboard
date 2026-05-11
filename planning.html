@@ -36,7 +36,7 @@
     <div class="metric">
       <div class="metric-label">Lugn andel</div>
       <div class="metric-value" id="m-easy-share">–</div>
-      <div class="metric-sub">senaste 8 veckor · från laps</div>
+      <div class="metric-sub" id="m-easy-share-sub">senaste 8 veckor · från laps</div>
     </div>
     <div class="metric">
       <div class="metric-label">Kvalitetspass</div>
@@ -144,6 +144,11 @@ const classMeta = {
   progressive: { label:'Progressivt',       badge:'badge-progressive', color:'#534AB7' },
   mixed:       { label:'Blandat/oklart',    badge:'badge-mixed',       color:'#9a9a94' }
 };
+const EASY_HR_BUFFER_BPM = 5;
+
+function easyHrCeiling(zones) {
+  return zones[1].max + EASY_HR_BUFFER_BPM;
+}
 
 function loadClassOverrides() {
   try {
@@ -259,10 +264,11 @@ function usableLaps(laps) {
 function intensityForLap(lap, medianPace, zones) {
   const hr = lap.avg_hr || 0;
   const pace = lap.pace_sec_per_km || null;
+  const lowHrCeiling = easyHrCeiling(zones);
   let score = 0;
   if (hr >= zones[3].min) score = Math.max(score, 2);
-  else if (hr >= zones[2].min) score = Math.max(score, 1);
-  else if (hr && hr < zones[1].max) score = Math.min(score, -1);
+  else if (hr > lowHrCeiling) score = Math.max(score, 1);
+  else if (hr) score = Math.min(score, -1);
 
   if (pace && medianPace) {
     if (pace <= medianPace * 0.88) score = Math.max(score, 2);
@@ -294,7 +300,7 @@ function classifyFromSummary(activity, zones) {
   const pace = activity.distance_meters && activity.duration_seconds
     ? activity.duration_seconds / (activity.distance_meters / 1000)
     : null;
-  if (activity.avg_hr && activity.avg_hr < zones[1].max) {
+  if (activity.avg_hr && activity.avg_hr <= easyHrCeiling(zones)) {
     return { key:'easy', confidence:'Låg', evidence:'Saknar användbara laps; klassad på låg snittpuls.' };
   }
   if (activity.avg_hr && activity.avg_hr >= zones[3].min) {
@@ -413,6 +419,7 @@ function render() {
   document.getElementById('m-next-volume').textContent = chronicKm ? `${Math.round(low)}–${Math.round(high)} km` : '–';
   document.getElementById('m-next-volume-sub').textContent = chronicKm ? volNote : 'behöver fler löpveckor';
   document.getElementById('m-easy-share').textContent = recentDuration ? pct(easyShare) : '–';
+  document.getElementById('m-easy-share-sub').textContent = `senaste 8 veckor · lugnt ≤ ${Math.round(easyHrCeiling(zones))} bpm`;
   document.getElementById('m-quality').textContent = quality14;
   document.getElementById('m-classified').textContent = `${classifiedHigh}/${recent.length || 0}`;
   document.getElementById('m-classified-sub').textContent = manualCount ? `${manualCount} manuellt justerade` : 'med bra lap-underlag';
