@@ -182,21 +182,12 @@ function applyManualOverride(d) {
   const manualKey = classOverrides[d.activity.id];
   if (!manualKey || !classMeta[manualKey]) return d;
   const automatic = d.key;
-  const hasLapSplit = d.laps?.length >= 3 && Number.isFinite(d.easyDuration);
-  const easyDuration = ['easy','long'].includes(manualKey)
-    ? d.duration
-    : hasLapSplit
-      ? d.easyDuration
-      : 0;
-  const hardShare = d.duration ? Math.max(0, Math.min(1, 1 - (easyDuration / d.duration))) : d.hardShare;
   return {
     ...d,
     automaticKey: automatic,
     key: manualKey,
     confidence: 'Manuell',
     quality: ['threshold','vo2','progressive'].includes(manualKey),
-    easyDuration,
-    hardShare,
     evidence: `Manuellt klassad som ${classMeta[manualKey].label}. Lugn/hård tid räknas fortfarande från laps när de finns. Auto var ${classMeta[automatic]?.label || automatic}.`
   };
 }
@@ -392,11 +383,13 @@ function render() {
   const runs = allActivities.filter(a => a.activity_type === 'running');
   const byActivity = groupLapsByActivity(allLaps);
   const { zones } = getHRConfig();
-  const diagnostics = runs.map(a => applyManualOverride(classifyRun(a, byActivity[a.id] || [], zones)));
+  const autoDiagnostics = runs.map(a => classifyRun(a, byActivity[a.id] || [], zones));
+  const diagnostics = autoDiagnostics.map(applyManualOverride);
   const end = new Date(Math.max(...runs.map(a => new Date(a.activity_date).getTime()), Date.now()));
   const since56 = new Date(end); since56.setDate(end.getDate() - 56);
   const since14 = new Date(end); since14.setDate(end.getDate() - 14);
   const recent = diagnostics.filter(d => new Date(d.activity.activity_date) >= since56);
+  const recentLoad = autoDiagnostics.filter(d => new Date(d.activity.activity_date) >= since56);
   const last14 = diagnostics.filter(d => new Date(d.activity.activity_date) >= since14);
   const weeks = buildWeeklyStats(diagnostics);
   const wKeys = Object.keys(weeks).sort();
@@ -405,8 +398,8 @@ function render() {
   const chronicKm = recentKm.slice(-4).reduce((s,v)=>s+v,0) / Math.max(1, Math.min(4, recentKm.length));
   const lastWeekKm = recentKm[recentKm.length - 1] || 0;
   const acwr = chronicKm ? lastWeekKm / chronicKm : 1;
-  const recentDuration = recent.reduce((s,d)=>s+(d.duration||0),0);
-  const easyDuration = recent.reduce((s,d)=>s+(d.easyDuration||0),0);
+  const recentDuration = recentLoad.reduce((s,d)=>s+(d.duration||0),0);
+  const easyDuration = recentLoad.reduce((s,d)=>s+(d.easyDuration||0),0);
   const easyShare = recentDuration ? easyDuration / recentDuration : 0;
   const quality14 = last14.filter(d => d.quality).length;
   const classifiedHigh = recent.filter(d => d.confidence !== 'Låg').length;
@@ -419,7 +412,7 @@ function render() {
   document.getElementById('m-next-volume').textContent = chronicKm ? `${Math.round(low)}–${Math.round(high)} km` : '–';
   document.getElementById('m-next-volume-sub').textContent = chronicKm ? volNote : 'behöver fler löpveckor';
   document.getElementById('m-easy-share').textContent = recentDuration ? pct(easyShare) : '–';
-  document.getElementById('m-easy-share-sub').textContent = `senaste 8 veckor · lugnt ≤ ${Math.round(easyHrCeiling(zones))} bpm`;
+  document.getElementById('m-easy-share-sub').textContent = `senaste 8 veckor · ${recentLoad.length} pass · lugnt ≤ ${Math.round(easyHrCeiling(zones))} bpm`;
   document.getElementById('m-quality').textContent = quality14;
   document.getElementById('m-classified').textContent = `${classifiedHigh}/${recent.length || 0}`;
   document.getElementById('m-classified-sub').textContent = manualCount ? `${manualCount} manuellt justerade` : 'med bra lap-underlag';
