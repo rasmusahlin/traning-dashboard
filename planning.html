@@ -44,7 +44,7 @@
       <div class="metric-sub">senaste 14 dagar</div>
     </div>
     <div class="metric">
-      <div class="metric-label">Automatiskt klassade</div>
+      <div class="metric-label">Klassade</div>
       <div class="metric-value" id="m-classified">–</div>
       <div class="metric-sub" id="m-classified-sub"></div>
     </div>
@@ -87,7 +87,7 @@
   <div class="card">
     <div class="card-header">
       <span class="card-title">Senaste passdiagnoser</span>
-      <span style="font-size:12px;color:var(--text3)">Automatiskt tolkat från laps, puls och tempo</span>
+      <span id="manual-summary" style="font-size:12px;color:var(--text3)">Auto från laps, kan justeras</span>
     </div>
     <div id="diagnosis-list" class="activity-list"></div>
   </div>
@@ -107,7 +107,24 @@
 .badge-vo2 { background:var(--z5); color:var(--z5t); }
 .badge-progressive { background:#eeedfe; color:#3c3489; }
 .badge-mixed { background:var(--surface2); color:var(--text2); border:0.5px solid var(--border2); }
+.diagnosis-item {
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto minmax(170px,auto);
+  align-items:center;gap:12px;
+}
+.diagnosis-actions { display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;min-width:160px; }
+.class-select {
+  font-size:12px;padding:4px 7px;border:0.5px solid var(--border2);border-radius:var(--radius-sm);
+  background:var(--surface);color:var(--text);max-width:155px;
+}
+.detail-link { font-size:12px;color:var(--text2);padding:4px 7px;border:0.5px solid var(--border);border-radius:var(--radius-sm); }
+.detail-link:hover { background:var(--surface2);color:var(--text); }
 @media (max-width: 800px) { .plan-grid { grid-template-columns: 1fr; } }
+@media (max-width: 700px) {
+  .diagnosis-item { grid-template-columns:1fr;align-items:flex-start; }
+  .diagnosis-item .activity-right { text-align:left; }
+  .diagnosis-actions { justify-content:flex-start;width:100%;padding-left:0; }
+  .class-select { max-width:none;flex:1; }
+}
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -116,6 +133,8 @@
 let allActivities = [];
 let allLaps = [];
 let charts = {};
+const CLASS_OVERRIDE_KEY = 'training_dashboard_class_overrides';
+let classOverrides = loadClassOverrides();
 
 const classMeta = {
   easy:        { label:'Lugnt/Z2',          badge:'badge-easy',        color:'#185FA5' },
@@ -125,6 +144,49 @@ const classMeta = {
   progressive: { label:'Progressivt',       badge:'badge-progressive', color:'#534AB7' },
   mixed:       { label:'Blandat/oklart',    badge:'badge-mixed',       color:'#9a9a94' }
 };
+
+function loadClassOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(CLASS_OVERRIDE_KEY) || '{}');
+  } catch(e) {
+    localStorage.removeItem(CLASS_OVERRIDE_KEY);
+    return {};
+  }
+}
+
+function saveClassOverride(activityId, key) {
+  if (!activityId) return;
+  if (!key) delete classOverrides[activityId];
+  else classOverrides[activityId] = key;
+  localStorage.setItem(CLASS_OVERRIDE_KEY, JSON.stringify(classOverrides));
+  render();
+  toast(key ? 'Klassning sparad' : 'Automatisk klassning återställd');
+}
+
+function escapeHtml(value = '') {
+  return String(value).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
+function applyManualOverride(d) {
+  const manualKey = classOverrides[d.activity.id];
+  if (!manualKey || !classMeta[manualKey]) return d;
+  const automatic = d.key;
+  return {
+    ...d,
+    automaticKey: automatic,
+    key: manualKey,
+    confidence: 'Manuell',
+    quality: ['threshold','vo2','progressive'].includes(manualKey),
+    easyDuration: ['easy','long'].includes(manualKey) ? d.duration : 0,
+    evidence: `Manuellt klassad som ${classMeta[manualKey].label}. Auto var ${classMeta[automatic]?.label || automatic}.`
+  };
+}
 
 async function init() {
   try {
@@ -310,7 +372,7 @@ function render() {
   const runs = allActivities.filter(a => a.activity_type === 'running');
   const byActivity = groupLapsByActivity(allLaps);
   const { zones } = getHRConfig();
-  const diagnostics = runs.map(a => classifyRun(a, byActivity[a.id] || [], zones));
+  const diagnostics = runs.map(a => applyManualOverride(classifyRun(a, byActivity[a.id] || [], zones)));
   const end = new Date(Math.max(...runs.map(a => new Date(a.activity_date).getTime()), Date.now()));
   const since56 = new Date(end); since56.setDate(end.getDate() - 56);
   const since14 = new Date(end); since14.setDate(end.getDate() - 14);
@@ -328,6 +390,7 @@ function render() {
   const easyShare = recentDuration ? easyDuration / recentDuration : 0;
   const quality14 = last14.filter(d => d.quality).length;
   const classifiedHigh = recent.filter(d => d.confidence !== 'Låg').length;
+  const manualCount = recent.filter(d => classOverrides[d.activity.id]).length;
 
   let low = chronicKm * 0.9, high = chronicKm * 1.1, volNote = 'normal uppbyggnad';
   if (acwr > 1.3) { low = chronicKm * 0.75; high = chronicKm * 0.95; volNote = 'dämpa efter snabb ökning'; }
@@ -338,7 +401,10 @@ function render() {
   document.getElementById('m-easy-share').textContent = recentDuration ? pct(easyShare) : '–';
   document.getElementById('m-quality').textContent = quality14;
   document.getElementById('m-classified').textContent = `${classifiedHigh}/${recent.length || 0}`;
-  document.getElementById('m-classified-sub').textContent = 'med bra lap-underlag';
+  document.getElementById('m-classified-sub').textContent = manualCount ? `${manualCount} manuellt justerade` : 'med bra lap-underlag';
+  document.getElementById('manual-summary').textContent = manualCount
+    ? `${manualCount} manuella klassningar i aktuell period`
+    : 'Auto från laps, kan justeras';
 
   renderPlan({ easyShare, quality14, acwr, chronicKm, low, high, diagnostics, recent, last14 });
   renderRisks({ easyShare, quality14, acwr, lastWeekKm, chronicKm, recent });
@@ -438,15 +504,27 @@ function renderDiagnosisList(items) {
     const meta = classMeta[d.key];
     const dist = d.distanceKm ? `${d.distanceKm.toFixed(1)} km` : '–';
     const dur = fmtDuration(d.duration);
-    return `<div class="activity-item" onclick="location.href='activity.html?id=${d.activity.id}'">
+    const options = Object.entries(classMeta).map(([key, m]) =>
+      `<option value="${key}" ${d.key === key ? 'selected' : ''}>${m.label}</option>`
+    ).join('');
+    const manual = !!classOverrides[d.activity.id];
+    const badgeTitle = manual ? `${meta.label} · manuell` : meta.label;
+    return `<div class="activity-item diagnosis-item">
       <span class="class-badge ${meta.badge}">${meta.label}</span>
       <div class="activity-main">
         <div class="activity-name">${fmtDate(d.activity.activity_date)} · ${dist} · ${dur}</div>
-        <div class="activity-meta">${d.evidence} Säkerhet: ${d.confidence}.</div>
+        <div class="activity-meta">${escapeHtml(d.evidence)} Säkerhet: ${d.confidence}.${manual ? ' Manuell override används i grafer och planering.' : ''}</div>
       </div>
       <div class="activity-right">
         <div class="activity-dist">${d.activity.avg_hr ? d.activity.avg_hr + ' bpm' : '–'}</div>
         <div class="activity-pace">${d.activity.distance_meters && d.activity.duration_seconds ? fmtPace(d.activity.duration_seconds/(d.activity.distance_meters/1000)) + '/km' : ''}</div>
+      </div>
+      <div class="diagnosis-actions">
+        <select class="class-select" title="${badgeTitle}" onchange="saveClassOverride('${d.activity.id}', this.value)">
+          ${options}
+        </select>
+        ${manual ? `<button class="btn btn-sm" onclick="saveClassOverride('${d.activity.id}', '')">Auto</button>` : ''}
+        <a class="detail-link" href="activity.html?id=${d.activity.id}">Detalj</a>
       </div>
     </div>`;
   }).join('');
