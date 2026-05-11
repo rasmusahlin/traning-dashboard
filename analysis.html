@@ -14,6 +14,7 @@
     <div class="nav-links">
       <a href="index.html">Översikt</a>
       <a href="analysis.html" class="active">Analys</a>
+      <a href="planning.html">Planering</a>
       <a href="upload.html">Ladda upp</a>
       <a href="settings.html">Inställningar</a>
     </div>
@@ -522,10 +523,11 @@ function renderCharts(runs) {
           if (daysLeft > 365 * 4) {
             projEl.innerHTML = `<span style="color:var(--text3)">📈 Trenden pekar åt rätt håll men är än så länge för svag för en tillförlitlig tidsangivelse. Fortsätt bygga volym.</span>`;
           } else {
-            const projDate = new Date();
+            const baseDate = new Date(Math.max(Date.now(), lastDate.getTime()));
+            const projDate = new Date(baseDate);
             projDate.setDate(projDate.getDate() + daysLeft);
-            const projStr = projDate.toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' });
-            projEl.innerHTML = `🎯 Med nuvarande trend når du sub-40-målnivån (<strong>${sub40ref} m/slag</strong>) om ca <strong>${weeksLeft} veckor</strong> — runt <strong>${projStr}</strong>.`;
+            const projStr = projDate.toLocaleDateString('sv-SE', { day: 'numeric', month: 'long', year: 'numeric' });
+            projEl.innerHTML = `🎯 Med nuvarande trend når du sub-40-målnivån (<strong>${sub40ref} m/slag</strong>) runt <strong>${projStr}</strong> — om ca <strong>${weeksLeft} veckor</strong>.`;
           }
         }
       }
@@ -541,20 +543,31 @@ function renderCharts(runs) {
   // ── Z2 pace ────────────────────────────────────────────────────
   const { zones } = getHRConfig();
   const z2 = zones[1];
+  const z2TargetHr = (z2.min + z2.max) / 2;
   document.getElementById('z2-desc').textContent =
-    `Pace på pass där snittpulsen låg i Z2 (${Math.round(z2.min)}–${Math.round(z2.max)} bpm). ` +
-    'Sjunkande linje = du springer snabbare vid samma ansträngning = stärkt aerob bas.';
+    `Normaliserad pace på pass där snittpulsen låg i Z2 (${Math.round(z2.min)}–${Math.round(z2.max)} bpm), ` +
+    `omräknad till Z2-mitten ${Math.round(z2TargetHr)} bpm. Lägre puls straffas därför inte; ` +
+    'sjunkande linje = bättre fart vid samma aeroba ansträngning.';
   const z2Runs = runs.filter(a => a.avg_hr >= z2.min && a.avg_hr < z2.max && (a.distance_meters||0) > 2000 && a.duration_seconds);
   if (z2Runs.length >= 3) {
-    const z2Vals   = z2Runs.map(a => +(a.duration_seconds/(a.distance_meters/1000)).toFixed(1));
-    const z2Labels = z2Runs.map(a => a.activity_date.slice(5));
+    const z2Data = z2Runs.map(a => {
+      const rawPace = a.duration_seconds / (a.distance_meters / 1000);
+      return {
+        date: a.activity_date,
+        hr: a.avg_hr,
+        rawPace,
+        normalizedPace: +(rawPace * (a.avg_hr / z2TargetHr)).toFixed(1)
+      };
+    });
+    const z2Vals   = z2Data.map(d => d.normalizedPace);
+    const z2Labels = z2Data.map(d => d.date.slice(5));
     const z2Smooth = movingAvg(z2Vals, 5);
     const z2Trend  = trendLine(z2Vals);
     charts.z2 = new Chart(document.getElementById('chart-z2'), {
       type:'line',
       data:{ labels:z2Labels, datasets:[
         { data:z2Trend,  borderColor:'rgba(186,117,23,0.6)', borderDash:[4,4], pointRadius:0, borderWidth:1.5, label:'Trend', order:3 },
-        { data:z2Vals,   borderColor:'rgba(29,158,117,0.25)', backgroundColor:'transparent', pointRadius:3, pointBackgroundColor:'rgba(29,158,117,0.45)', borderWidth:1, tension:0.1, label:'Pace', order:2 },
+        { data:z2Vals,   borderColor:'rgba(29,158,117,0.25)', backgroundColor:'transparent', pointRadius:3, pointBackgroundColor:'rgba(29,158,117,0.45)', borderWidth:1, tension:0.1, label:'Normaliserad pace', order:2 },
         { data:z2Smooth, borderColor:'#1d9e75', backgroundColor:'transparent', pointRadius:0, borderWidth:2, tension:0.4, label:'5-pass snitt', order:1 }
       ]},
       options:{
@@ -564,8 +577,18 @@ function renderCharts(runs) {
           tooltip:{
             filter: item => item.dataset.label !== 'Trend',
             callbacks:{
-              title: items => z2Runs[items[0].dataIndex]?.activity_date || '',
-              label: ctx => ctx.dataset.label+': '+fmtPace(ctx.raw)+'/km'
+              title: items => z2Data[items[0].dataIndex]?.date || '',
+              label: ctx => {
+                const d = z2Data[ctx.dataIndex];
+                if (ctx.dataset.label === 'Normaliserad pace' && d) {
+                  return [
+                    `Normaliserad: ${fmtPace(ctx.raw)}/km`,
+                    `Faktisk: ${fmtPace(d.rawPace)}/km vid ${d.hr} bpm`,
+                    `Målpuls: ${Math.round(z2TargetHr)} bpm`
+                  ];
+                }
+                return ctx.dataset.label+': '+fmtPace(ctx.raw)+'/km';
+              }
             }
           }
         },

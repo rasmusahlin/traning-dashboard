@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planering – Träningsdashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <span class="nav-brand">Träningsdashboard</span>
+    <div class="nav-links">
+      <a href="index.html">Översikt</a>
+      <a href="analysis.html">Analys</a>
+      <a href="planning.html" class="active">Planering</a>
+      <a href="upload.html">Ladda upp</a>
+      <a href="settings.html">Inställningar</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>Planering</h1>
+    <p id="conn-label"><span class="status-dot status-loading" id="conn-dot"></span><span id="conn-text">Ansluter...</span></p>
+  </div>
+
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Nästa veckovolym</div>
+      <div class="metric-value" id="m-next-volume">–</div>
+      <div class="metric-sub" id="m-next-volume-sub"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Lugn andel</div>
+      <div class="metric-value" id="m-easy-share">–</div>
+      <div class="metric-sub">senaste 8 veckor</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Kvalitetspass</div>
+      <div class="metric-value" id="m-quality">–</div>
+      <div class="metric-sub">senaste 14 dagar</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Klassade</div>
+      <div class="metric-value" id="m-classified">–</div>
+      <div class="metric-sub" id="m-classified-sub"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Nästa bästa vecka</span>
+      <span id="plan-confidence" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+    <div id="plan-recommendations" class="plan-grid"></div>
+  </div>
+
+  <div class="chart-row">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Passmix – senaste 8 veckor</span></div>
+      <div style="display:flex;align-items:center;gap:1rem;min-height:210px">
+        <div style="position:relative;width:160px;height:160px;flex-shrink:0">
+          <canvas id="chart-class-mix" width="160" height="160" style="width:160px;height:160px"></canvas>
+        </div>
+        <div id="class-legend" style="font-size:13px;color:var(--text2);line-height:1.7"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Veckomix från laps</span></div>
+      <div style="position:relative;height:210px">
+        <canvas id="chart-week-mix"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Riskflaggor och bakslag</span>
+      <span id="risk-summary" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+    <div id="risk-list" class="plan-grid"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Senaste passdiagnoser</span>
+      <span id="manual-summary" style="font-size:12px;color:var(--text3)">Auto från laps, kan justeras</span>
+    </div>
+    <div id="diagnosis-list" class="activity-list"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<style>
+.plan-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.plan-note { background: var(--surface2); border-radius: var(--radius); padding: 12px 14px; min-height: 94px; }
+.plan-note-title { font-size: 13px; font-weight: 500; margin-bottom: 5px; }
+.plan-note-body { font-size: 13px; color: var(--text2); line-height: 1.45; }
+.class-badge { display:inline-block;padding:2px 8px;border-radius:var(--radius-sm);font-size:11px;font-weight:500;white-space:nowrap; }
+.badge-easy { background:var(--z2); color:var(--z2t); }
+.badge-long { background:var(--z1); color:var(--z1t); }
+.badge-threshold { background:var(--z3); color:var(--z3t); }
+.badge-vo2 { background:var(--z5); color:var(--z5t); }
+.badge-progressive { background:#eeedfe; color:#3c3489; }
+.badge-mixed { background:var(--surface2); color:var(--text2); border:0.5px solid var(--border2); }
+.diagnosis-item {
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto minmax(170px,auto);
+  align-items:center;gap:12px;
+}
+.diagnosis-actions { display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;min-width:160px; }
+.class-select {
+  font-size:12px;padding:4px 7px;border:0.5px solid var(--border2);border-radius:var(--radius-sm);
+  background:var(--surface);color:var(--text);max-width:155px;
+}
+.detail-link { font-size:12px;color:var(--text2);padding:4px 7px;border:0.5px solid var(--border);border-radius:var(--radius-sm); }
+.detail-link:hover { background:var(--surface2);color:var(--text); }
+@media (max-width: 800px) { .plan-grid { grid-template-columns: 1fr; } }
+@media (max-width: 700px) {
+  .diagnosis-item { grid-template-columns:1fr;align-items:flex-start; }
+  .diagnosis-item .activity-right { text-align:left; }
+  .diagnosis-actions { justify-content:flex-start;width:100%;padding-left:0; }
+  .class-select { max-width:none;flex:1; }
+}
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="js/db.js"></script>
+<script>
+let allActivities = [];
+let allLaps = [];
+let charts = {};
+const CLASS_OVERRIDE_KEY = 'training_dashboard_class_overrides';
+let classOverrides = loadClassOverrides();
+
+const classMeta = {
+  easy:        { label:'Lugnt/Z2',          badge:'badge-easy',        color:'#185FA5' },
+  long:        { label:'Långpass lugnt',    badge:'badge-long',        color:'#1d9e75' },
+  threshold:   { label:'Tröskel/tempo',     badge:'badge-threshold',   color:'#ba7517' },
+  vo2:         { label:'VO2max/intervall',  badge:'badge-vo2',         color:'#e24b4a' },
+  progressive: { label:'Progressivt',       badge:'badge-progressive', color:'#534AB7' },
+  mixed:       { label:'Blandat/oklart',    badge:'badge-mixed',       color:'#9a9a94' }
+};
+
+function loadClassOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(CLASS_OVERRIDE_KEY) || '{}');
+  } catch(e) {
+    localStorage.removeItem(CLASS_OVERRIDE_KEY);
+    return {};
+  }
+}
+
+function saveClassOverride(activityId, key) {
+  if (!activityId) return;
+  if (!key) delete classOverrides[activityId];
+  else classOverrides[activityId] = key;
+  localStorage.setItem(CLASS_OVERRIDE_KEY, JSON.stringify(classOverrides));
+  render();
+  toast(key ? 'Klassning sparad' : 'Automatisk klassning återställd');
+}
+
+function escapeHtml(value = '') {
+  return String(value).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
+function applyManualOverride(d) {
+  const manualKey = classOverrides[d.activity.id];
+  if (!manualKey || !classMeta[manualKey]) return d;
+  const automatic = d.key;
+  return {
+    ...d,
+    automaticKey: automatic,
+    key: manualKey,
+    confidence: 'Manuell',
+    quality: ['threshold','vo2','progressive'].includes(manualKey),
+    easyDuration: ['easy','long'].includes(manualKey) ? d.duration : 0,
+    evidence: `Manuellt klassad som ${classMeta[manualKey].label}. Auto var ${classMeta[automatic]?.label || automatic}.`
+  };
+}
+
+async function init() {
+  try {
+    const [activities, laps] = await Promise.all([
+      dbQuery('activities?order=activity_date.asc&limit=2000'),
+      dbQuery('laps?select=activity_id,lap_index,distance_meters,duration_seconds,avg_hr,avg_pace_sec_per_km&limit=30000').catch(() => [])
+    ]);
+    allActivities = activities || [];
+    allLaps = (laps || []).sort((a,b) =>
+      String(a.activity_id).localeCompare(String(b.activity_id)) || (a.lap_index || 0) - (b.lap_index || 0)
+    );
+    setConnected(true);
+    render();
+  } catch(e) {
+    setConnected(false);
+    console.error(e);
+  }
+}
+
+function setConnected(ok) {
+  document.getElementById('conn-dot').className = 'status-dot ' + (ok ? 'status-ok' : 'status-err');
+  document.getElementById('conn-text').textContent = ok ? 'Ansluten till Supabase' : 'Anslutningsfel';
+}
+
+function median(values) {
+  const arr = values.filter(v => isFinite(v)).sort((a,b)=>a-b);
+  if (!arr.length) return null;
+  const mid = Math.floor(arr.length / 2);
+  return arr.length % 2 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
+}
+
+function pct(v) {
+  return Math.round(v * 100) + '%';
+}
+
+function weekKey(dateStr) {
+  const d = new Date(dateStr);
+  const mon = new Date(d);
+  mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return mon.toISOString().slice(0, 10);
+}
+
+function groupLapsByActivity(laps) {
+  return laps.reduce((map, lap) => {
+    if (!map[lap.activity_id]) map[lap.activity_id] = [];
+    map[lap.activity_id].push(lap);
+    return map;
+  }, {});
+}
+
+function usableLaps(laps) {
+  return laps
+    .map(l => {
+      const dist = +(l.distance_meters || 0);
+      const dur = +(l.duration_seconds || 0);
+      const pace = l.avg_pace_sec_per_km || (dist > 100 && dur > 0 ? dur / (dist / 1000) : null);
+      return { ...l, distance_meters:dist, duration_seconds:dur, pace_sec_per_km:pace, avg_hr:l.avg_hr ? +l.avg_hr : null };
+    })
+    .filter(l => l.duration_seconds >= 45 && (l.distance_meters >= 100 || l.pace_sec_per_km));
+}
+
+function intensityForLap(lap, medianPace, zones) {
+  const hr = lap.avg_hr || 0;
+  const pace = lap.pace_sec_per_km || null;
+  let score = 0;
+  if (hr >= zones[3].min) score = Math.max(score, 2);
+  else if (hr >= zones[2].min) score = Math.max(score, 1);
+  else if (hr && hr < zones[1].max) score = Math.min(score, -1);
+
+  if (pace && medianPace) {
+    if (pace <= medianPace * 0.88) score = Math.max(score, 2);
+    else if (pace <= medianPace * 0.94) score = Math.max(score, 1);
+    else if (pace >= medianPace * 1.08) score = Math.min(score, -1);
+  }
+  return score;
+}
+
+function hardBlocks(laps) {
+  const blocks = [];
+  let block = null;
+  laps.forEach((lap, i) => {
+    if (lap.intensity >= 1) {
+      if (!block) block = { start:i, end:i, duration:0, veryHard:false };
+      block.end = i;
+      block.duration += lap.duration_seconds || 0;
+      block.veryHard = block.veryHard || lap.intensity >= 2;
+    } else if (block) {
+      blocks.push(block);
+      block = null;
+    }
+  });
+  if (block) blocks.push(block);
+  return blocks;
+}
+
+function classifyFromSummary(activity, zones) {
+  const pace = activity.distance_meters && activity.duration_seconds
+    ? activity.duration_seconds / (activity.distance_meters / 1000)
+    : null;
+  if (activity.avg_hr && activity.avg_hr < zones[1].max) {
+    return { key:'easy', confidence:'Låg', evidence:'Saknar användbara laps; klassad på låg snittpuls.' };
+  }
+  if (activity.avg_hr && activity.avg_hr >= zones[3].min) {
+    return { key:'threshold', confidence:'Låg', evidence:'Saknar användbara laps; hög snittpuls tyder på kvalitet.' };
+  }
+  return { key:'mixed', confidence:'Låg', evidence: pace ? 'Saknar användbara laps; klassningen är osäker.' : 'Saknar pace/lap-data.' };
+}
+
+function classifyRun(activity, activityLaps, zones) {
+  const laps = usableLaps(activityLaps);
+  const duration = activity.duration_seconds || laps.reduce((s,l)=>s+l.duration_seconds,0);
+  const distanceKm = (activity.distance_meters || laps.reduce((s,l)=>s+l.distance_meters,0)) / 1000;
+  if (laps.length < 3) {
+    const fallback = classifyFromSummary(activity, zones);
+    return { activity, laps, duration, distanceKm, hardShare:0, quality:false, ...fallback };
+  }
+
+  const medianPace = median(laps.map(l => l.pace_sec_per_km));
+  laps.forEach(l => { l.intensity = intensityForLap(l, medianPace, zones); });
+  const blocks = hardBlocks(laps);
+  const hardDuration = laps.filter(l => l.intensity >= 1).reduce((s,l)=>s+l.duration_seconds,0);
+  const easyDuration = laps.filter(l => l.intensity <= 0).reduce((s,l)=>s+l.duration_seconds,0);
+  const hardShare = duration ? hardDuration / duration : 0;
+  const maxBlock = blocks.reduce((max,b)=>Math.max(max,b.duration),0);
+  const avgBlock = blocks.length ? blocks.reduce((s,b)=>s+b.duration,0) / blocks.length : 0;
+  const paceVals = laps.map(l => l.pace_sec_per_km).filter(Boolean);
+  const avgPace = paceVals.reduce((s,v)=>s+v,0) / Math.max(1, paceVals.length);
+  const paceCv = avgPace ? Math.sqrt(paceVals.reduce((s,v)=>s+(v-avgPace)**2,0) / paceVals.length) / avgPace : 0;
+  const firstHalf = median(laps.slice(0, Math.ceil(laps.length/2)).map(l=>l.pace_sec_per_km));
+  const secondHalf = median(laps.slice(Math.floor(laps.length/2)).map(l=>l.pace_sec_per_km));
+  const progressive = firstHalf && secondHalf && secondHalf < firstHalf * 0.96 && hardShare < 0.38;
+  const hasWarmup = blocks.some(b => b.start > 0) && laps.slice(0, blocks[0]?.start || 0).some(l => l.intensity <= 0);
+  const hasCooldown = blocks.length && laps.slice(blocks[blocks.length-1].end + 1).some(l => l.intensity <= 0);
+
+  let key = 'mixed';
+  let confidence = laps.length >= 5 ? 'Hög' : 'Medel';
+  let evidence = `${laps.length} laps analyserade.`;
+
+  if (blocks.length >= 3 && avgBlock <= 540 && hardShare >= 0.18) {
+    key = 'vo2';
+    evidence = `${blocks.length} hårda block, oftast korta (${Math.round(avgBlock/60)} min snitt), med återhämtning mellan.`;
+  } else if (maxBlock >= 600 && blocks.length <= 2 && hardShare >= 0.18) {
+    key = 'threshold';
+    evidence = `${Math.round(maxBlock/60)} min sammanhängande hårt block${hasWarmup ? ' efter uppvärmning' : ''}${hasCooldown ? ' med nedjogg' : ''}.`;
+  } else if (distanceKm >= 12 && hardShare < 0.20) {
+    key = 'long';
+    evidence = `${distanceKm.toFixed(1)} km med låg hård andel (${pct(hardShare)}).`;
+  } else if (hardShare < 0.12 && paceCv < 0.08) {
+    key = 'easy';
+    evidence = `Jämnt tempo och låg hård andel (${pct(hardShare)}).`;
+  } else if (progressive) {
+    key = 'progressive';
+    evidence = `Andra halvan cirka ${Math.round((1 - secondHalf/firstHalf) * 100)}% snabbare än första.`;
+  } else {
+    evidence = `${blocks.length} hårda block, ${pct(hardShare)} av tiden hårt. Kan vara blandpass eller otydliga autolaps.`;
+    confidence = 'Medel';
+  }
+
+  return {
+    activity, laps, duration, distanceKm, hardShare, easyDuration, key, confidence,
+    quality: ['threshold','vo2','progressive'].includes(key),
+    evidence
+  };
+}
+
+function buildWeeklyStats(diagnostics) {
+  const weeks = {};
+  diagnostics.forEach(d => {
+    const k = weekKey(d.activity.activity_date);
+    if (!weeks[k]) weeks[k] = { km:0, duration:0, quality:0, easyDuration:0, classes:{} };
+    weeks[k].km += d.distanceKm || 0;
+    weeks[k].duration += d.duration || 0;
+    weeks[k].easyDuration += d.easyDuration || (['easy','long'].includes(d.key) ? d.duration : 0);
+    if (d.quality) weeks[k].quality++;
+    weeks[k].classes[d.key] = (weeks[k].classes[d.key] || 0) + (d.distanceKm || 0);
+  });
+  return weeks;
+}
+
+function render() {
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+  const runs = allActivities.filter(a => a.activity_type === 'running');
+  const byActivity = groupLapsByActivity(allLaps);
+  const { zones } = getHRConfig();
+  const diagnostics = runs.map(a => applyManualOverride(classifyRun(a, byActivity[a.id] || [], zones)));
+  const end = new Date(Math.max(...runs.map(a => new Date(a.activity_date).getTime()), Date.now()));
+  const since56 = new Date(end); since56.setDate(end.getDate() - 56);
+  const since14 = new Date(end); since14.setDate(end.getDate() - 14);
+  const recent = diagnostics.filter(d => new Date(d.activity.activity_date) >= since56);
+  const last14 = diagnostics.filter(d => new Date(d.activity.activity_date) >= since14);
+  const weeks = buildWeeklyStats(diagnostics);
+  const wKeys = Object.keys(weeks).sort();
+  const recentWeeks = wKeys.slice(-8);
+  const recentKm = recentWeeks.map(k => weeks[k].km);
+  const chronicKm = recentKm.slice(-4).reduce((s,v)=>s+v,0) / Math.max(1, Math.min(4, recentKm.length));
+  const lastWeekKm = recentKm[recentKm.length - 1] || 0;
+  const acwr = chronicKm ? lastWeekKm / chronicKm : 1;
+  const recentDuration = recent.reduce((s,d)=>s+(d.duration||0),0);
+  const easyDuration = recent.reduce((s,d)=>s+(d.easyDuration||0),0);
+  const easyShare = recentDuration ? easyDuration / recentDuration : 0;
+  const quality14 = last14.filter(d => d.quality).length;
+  const classifiedHigh = recent.filter(d => d.confidence !== 'Låg').length;
+  const manualCount = recent.filter(d => classOverrides[d.activity.id]).length;
+
+  let low = chronicKm * 0.9, high = chronicKm * 1.1, volNote = 'normal uppbyggnad';
+  if (acwr > 1.3) { low = chronicKm * 0.75; high = chronicKm * 0.95; volNote = 'dämpa efter snabb ökning'; }
+  else if (acwr < 0.8) { low = chronicKm * 1.0; high = chronicKm * 1.15; volNote = 'kan byggas försiktigt'; }
+
+  document.getElementById('m-next-volume').textContent = chronicKm ? `${Math.round(low)}–${Math.round(high)} km` : '–';
+  document.getElementById('m-next-volume-sub').textContent = chronicKm ? volNote : 'behöver fler löpveckor';
+  document.getElementById('m-easy-share').textContent = recentDuration ? pct(easyShare) : '–';
+  document.getElementById('m-quality').textContent = quality14;
+  document.getElementById('m-classified').textContent = `${classifiedHigh}/${recent.length || 0}`;
+  document.getElementById('m-classified-sub').textContent = manualCount ? `${manualCount} manuellt justerade` : 'med bra lap-underlag';
+  document.getElementById('manual-summary').textContent = manualCount
+    ? `${manualCount} manuella klassningar i aktuell period`
+    : 'Auto från laps, kan justeras';
+
+  renderPlan({ easyShare, quality14, acwr, chronicKm, low, high, diagnostics, recent, last14 });
+  renderRisks({ easyShare, quality14, acwr, lastWeekKm, chronicKm, recent });
+  renderCharts(recent, recentWeeks, weeks);
+  renderDiagnosisList(diagnostics.slice(-18).reverse());
+}
+
+function renderPlan(ctx) {
+  const thresholdRecent = ctx.diagnostics.some(d => d.key === 'threshold' && daysSince(d.activity.activity_date) <= 21);
+  const vo2Recent = ctx.diagnostics.some(d => d.key === 'vo2' && daysSince(d.activity.activity_date) <= 28);
+  const qualitySuggestion = !thresholdRecent
+    ? '1 tröskelpass: 10–15 min uppvärmning, 2×10–15 min kontrollerat hårt, nedjogg.'
+    : !vo2Recent
+      ? '1 VO2max-pass: korta intervaller, tydliga vilolaps och full kontroll på totalmängden.'
+      : 'Behåll 1 kvalitetspass och lägg extra energi på lugn volym.';
+  const easySuggestion = ctx.easyShare < 0.7
+    ? 'Prioritera 2–3 helt lugna Z2-pass. Låt dem vara jämna, även om tempot känns långsamt.'
+    : 'Behåll lugna pass som bas. Det är där trenden i meter per hjärtslag får bäst stöd.';
+  const longSuggestion = ctx.acwr > 1.3
+    ? 'Kortare långpass denna vecka; volymen har redan stigit snabbt.'
+    : '1 långpass lugnt. Öka hellre lite tid än fart om kroppen känns stabil.';
+
+  document.getElementById('plan-confidence').textContent = ctx.recent.length ? `${ctx.recent.length} löppass analyserade` : '';
+  document.getElementById('plan-recommendations').innerHTML = [
+    ['Volym', ctx.chronicKm ? `${Math.round(ctx.low)}–${Math.round(ctx.high)} km är ett rimligt spann nästa vecka.` : 'Behöver fler veckor för volymförslag.'],
+    ['Kvalitet', qualitySuggestion],
+    ['Bas', easySuggestion],
+    ['Långpass', longSuggestion],
+    ['Styrka', 'Lägg 1–2 styrkepass runt lugna dagar. Undvik tung benstyrka precis före kvalitet.'],
+    ['Styrsignal', 'Om puls/pace känns avvikande på uppvärmningen: gör om kvalitetspasset till Z2.']
+  ].map(([title, body]) => `<div class="plan-note"><div class="plan-note-title">${title}</div><div class="plan-note-body">${body}</div></div>`).join('');
+}
+
+function daysSince(dateStr) {
+  return (Date.now() - new Date(dateStr).getTime()) / 86400000;
+}
+
+function renderRisks(ctx) {
+  const risks = [];
+  if (ctx.acwr > 1.3) risks.push(['Volymspik', `Senaste veckan ligger på ${ctx.acwr.toFixed(2)}× mot 4-veckorssnitt. Sänk nästa vecka eller gör kvaliteten lättare.`]);
+  if (ctx.easyShare && ctx.easyShare < 0.68) risks.push(['För lite lugnt', `Lugn andel är ${pct(ctx.easyShare)}. Sikta på minst 70–80% lugn tid om målet är hållbar förbättring.`]);
+  if (ctx.quality14 > 3) risks.push(['Tät kvalitet', `${ctx.quality14} kvalitetspass på 14 dagar. Lägg in fler rena Z2-dagar innan nästa hårda block.`]);
+  if (!ctx.recent.some(d => d.key === 'long')) risks.push(['Långpass saknas', 'Inget lugnt långpass i senaste 8 veckor enligt klassningen. Lägg ett kontrollerat långt pass när volymen tillåter.']);
+  if (!risks.length) risks.push(['Inga tydliga varningar', 'Belastningen ser balanserad ut utifrån veckovolym, passmix och laps. Fortsätt följa trendbrott.']);
+  document.getElementById('risk-summary').textContent = `${risks.length} signaler`;
+  document.getElementById('risk-list').innerHTML = risks.map(([title, body]) =>
+    `<div class="plan-note"><div class="plan-note-title">${title}</div><div class="plan-note-body">${body}</div></div>`
+  ).join('');
+}
+
+function renderCharts(recent, recentWeeks, weeks) {
+  const counts = {};
+  recent.forEach(d => counts[d.key] = (counts[d.key] || 0) + 1);
+  const entries = Object.entries(counts);
+  charts.mix = new Chart(document.getElementById('chart-class-mix'), {
+    type:'doughnut',
+    data:{
+      labels: entries.map(([k])=>classMeta[k].label),
+      datasets:[{ data:entries.map(([,v])=>v), backgroundColor:entries.map(([k])=>classMeta[k].color), borderWidth:0 }]
+    },
+    options:{ responsive:false, cutout:'65%', plugins:{legend:{display:false}} }
+  });
+  document.getElementById('class-legend').innerHTML = entries.map(([k,v]) =>
+    `<div style="display:flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:2px;background:${classMeta[k].color}"></span>${classMeta[k].label}: ${v}</div>`
+  ).join('') || 'Inga löppass i perioden.';
+
+  const classKeys = ['easy','long','threshold','vo2','progressive','mixed'];
+  charts.week = new Chart(document.getElementById('chart-week-mix'), {
+    type:'bar',
+    data:{
+      labels: recentWeeks.map(k=>k.slice(5)),
+      datasets: classKeys.map(k => ({
+        label: classMeta[k].label,
+        data: recentWeeks.map(w => +(weeks[w]?.classes[k] || 0).toFixed(1)),
+        backgroundColor: classMeta[k].color,
+        borderWidth:0
+      }))
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.raw} km`}} },
+      scales:{
+        x:{stacked:true,grid:{display:false},ticks:{font:{size:11}}},
+        y:{stacked:true,beginAtZero:true,grid:{color:'rgba(128,128,128,0.08)'},ticks:{font:{size:11}}}
+      }
+    }
+  });
+}
+
+function renderDiagnosisList(items) {
+  const el = document.getElementById('diagnosis-list');
+  if (!items.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">◎</div>Inga löppass att analysera ännu</div>';
+    return;
+  }
+  el.innerHTML = items.map(d => {
+    const meta = classMeta[d.key];
+    const dist = d.distanceKm ? `${d.distanceKm.toFixed(1)} km` : '–';
+    const dur = fmtDuration(d.duration);
+    const options = Object.entries(classMeta).map(([key, m]) =>
+      `<option value="${key}" ${d.key === key ? 'selected' : ''}>${m.label}</option>`
+    ).join('');
+    const manual = !!classOverrides[d.activity.id];
+    const badgeTitle = manual ? `${meta.label} · manuell` : meta.label;
+    return `<div class="activity-item diagnosis-item">
+      <span class="class-badge ${meta.badge}">${meta.label}</span>
+      <div class="activity-main">
+        <div class="activity-name">${fmtDate(d.activity.activity_date)} · ${dist} · ${dur}</div>
+        <div class="activity-meta">${escapeHtml(d.evidence)} Säkerhet: ${d.confidence}.${manual ? ' Manuell override används i grafer och planering.' : ''}</div>
+      </div>
+      <div class="activity-right">
+        <div class="activity-dist">${d.activity.avg_hr ? d.activity.avg_hr + ' bpm' : '–'}</div>
+        <div class="activity-pace">${d.activity.distance_meters && d.activity.duration_seconds ? fmtPace(d.activity.duration_seconds/(d.activity.distance_meters/1000)) + '/km' : ''}</div>
+      </div>
+      <div class="diagnosis-actions">
+        <select class="class-select" title="${badgeTitle}" onchange="saveClassOverride('${d.activity.id}', this.value)">
+          ${options}
+        </select>
+        ${manual ? `<button class="btn btn-sm" onclick="saveClassOverride('${d.activity.id}', '')">Auto</button>` : ''}
+        <a class="detail-link" href="activity.html?id=${d.activity.id}">Detalj</a>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+init();
+</script>
+</body>
+</html>
