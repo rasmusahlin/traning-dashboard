@@ -36,7 +36,7 @@
     <div class="metric">
       <div class="metric-label">Lugn andel</div>
       <div class="metric-value" id="m-easy-share">–</div>
-      <div class="metric-sub">senaste 8 veckor</div>
+      <div class="metric-sub" id="m-easy-share-sub">senaste 8 veckor · från laps</div>
     </div>
     <div class="metric">
       <div class="metric-label">Kvalitetspass</div>
@@ -144,6 +144,11 @@ const classMeta = {
   progressive: { label:'Progressivt',       badge:'badge-progressive', color:'#534AB7' },
   mixed:       { label:'Blandat/oklart',    badge:'badge-mixed',       color:'#9a9a94' }
 };
+const EASY_HR_BUFFER_BPM = 5;
+
+function easyHrCeiling(zones) {
+  return zones[1].max + EASY_HR_BUFFER_BPM;
+}
 
 function loadClassOverrides() {
   try {
@@ -183,8 +188,7 @@ function applyManualOverride(d) {
     key: manualKey,
     confidence: 'Manuell',
     quality: ['threshold','vo2','progressive'].includes(manualKey),
-    easyDuration: ['easy','long'].includes(manualKey) ? d.duration : 0,
-    evidence: `Manuellt klassad som ${classMeta[manualKey].label}. Auto var ${classMeta[automatic]?.label || automatic}.`
+    evidence: `Manuellt klassad som ${classMeta[manualKey].label}. Lugn/hård tid räknas fortfarande från laps när de finns. Auto var ${classMeta[automatic]?.label || automatic}.`
   };
 }
 
@@ -251,10 +255,11 @@ function usableLaps(laps) {
 function intensityForLap(lap, medianPace, zones) {
   const hr = lap.avg_hr || 0;
   const pace = lap.pace_sec_per_km || null;
+  const lowHrCeiling = easyHrCeiling(zones);
   let score = 0;
   if (hr >= zones[3].min) score = Math.max(score, 2);
-  else if (hr >= zones[2].min) score = Math.max(score, 1);
-  else if (hr && hr < zones[1].max) score = Math.min(score, -1);
+  else if (hr > lowHrCeiling) score = Math.max(score, 1);
+  else if (hr) score = Math.min(score, -1);
 
   if (pace && medianPace) {
     if (pace <= medianPace * 0.88) score = Math.max(score, 2);
@@ -286,7 +291,7 @@ function classifyFromSummary(activity, zones) {
   const pace = activity.distance_meters && activity.duration_seconds
     ? activity.duration_seconds / (activity.distance_meters / 1000)
     : null;
-  if (activity.avg_hr && activity.avg_hr < zones[1].max) {
+  if (activity.avg_hr && activity.avg_hr <= easyHrCeiling(zones)) {
     return { key:'easy', confidence:'Låg', evidence:'Saknar användbara laps; klassad på låg snittpuls.' };
   }
   if (activity.avg_hr && activity.avg_hr >= zones[3].min) {
@@ -301,7 +306,13 @@ function classifyRun(activity, activityLaps, zones) {
   const distanceKm = (activity.distance_meters || laps.reduce((s,l)=>s+l.distance_meters,0)) / 1000;
   if (laps.length < 3) {
     const fallback = classifyFromSummary(activity, zones);
-    return { activity, laps, duration, distanceKm, hardShare:0, quality:false, ...fallback };
+    const easyDuration = ['easy','long'].includes(fallback.key) ? duration : 0;
+    const hardShare = duration ? Math.max(0, Math.min(1, 1 - (easyDuration / duration))) : 0;
+    return {
+      activity, laps, duration, distanceKm, hardShare, easyDuration,
+      quality: ['threshold','vo2','progressive'].includes(fallback.key),
+      ...fallback
+    };
   }
 
   const medianPace = median(laps.map(l => l.pace_sec_per_km));
@@ -372,11 +383,13 @@ function render() {
   const runs = allActivities.filter(a => a.activity_type === 'running');
   const byActivity = groupLapsByActivity(allLaps);
   const { zones } = getHRConfig();
-  const diagnostics = runs.map(a => applyManualOverride(classifyRun(a, byActivity[a.id] || [], zones)));
+  const autoDiagnostics = runs.map(a => classifyRun(a, byActivity[a.id] || [], zones));
+  const diagnostics = autoDiagnostics.map(applyManualOverride);
   const end = new Date(Math.max(...runs.map(a => new Date(a.activity_date).getTime()), Date.now()));
   const since56 = new Date(end); since56.setDate(end.getDate() - 56);
   const since14 = new Date(end); since14.setDate(end.getDate() - 14);
   const recent = diagnostics.filter(d => new Date(d.activity.activity_date) >= since56);
+  const recentLoad = autoDiagnostics.filter(d => new Date(d.activity.activity_date) >= since56);
   const last14 = diagnostics.filter(d => new Date(d.activity.activity_date) >= since14);
   const weeks = buildWeeklyStats(diagnostics);
   const wKeys = Object.keys(weeks).sort();
@@ -385,8 +398,8 @@ function render() {
   const chronicKm = recentKm.slice(-4).reduce((s,v)=>s+v,0) / Math.max(1, Math.min(4, recentKm.length));
   const lastWeekKm = recentKm[recentKm.length - 1] || 0;
   const acwr = chronicKm ? lastWeekKm / chronicKm : 1;
-  const recentDuration = recent.reduce((s,d)=>s+(d.duration||0),0);
-  const easyDuration = recent.reduce((s,d)=>s+(d.easyDuration||0),0);
+  const recentDuration = recentLoad.reduce((s,d)=>s+(d.duration||0),0);
+  const easyDuration = recentLoad.reduce((s,d)=>s+(d.easyDuration||0),0);
   const easyShare = recentDuration ? easyDuration / recentDuration : 0;
   const quality14 = last14.filter(d => d.quality).length;
   const classifiedHigh = recent.filter(d => d.confidence !== 'Låg').length;
@@ -399,6 +412,7 @@ function render() {
   document.getElementById('m-next-volume').textContent = chronicKm ? `${Math.round(low)}–${Math.round(high)} km` : '–';
   document.getElementById('m-next-volume-sub').textContent = chronicKm ? volNote : 'behöver fler löpveckor';
   document.getElementById('m-easy-share').textContent = recentDuration ? pct(easyShare) : '–';
+  document.getElementById('m-easy-share-sub').textContent = `senaste 8 veckor · ${recentLoad.length} pass · lugnt ≤ ${Math.round(easyHrCeiling(zones))} bpm`;
   document.getElementById('m-quality').textContent = quality14;
   document.getElementById('m-classified').textContent = `${classifiedHigh}/${recent.length || 0}`;
   document.getElementById('m-classified-sub').textContent = manualCount ? `${manualCount} manuellt justerade` : 'med bra lap-underlag';
@@ -509,11 +523,13 @@ function renderDiagnosisList(items) {
     ).join('');
     const manual = !!classOverrides[d.activity.id];
     const badgeTitle = manual ? `${meta.label} · manuell` : meta.label;
+    const easyShare = d.duration ? d.easyDuration / d.duration : 0;
+    const loadText = d.duration ? `Belastning: ${pct(d.hardShare || 0)} hårt, ${pct(easyShare)} lugnt.` : '';
     return `<div class="activity-item diagnosis-item">
       <span class="class-badge ${meta.badge}">${meta.label}</span>
       <div class="activity-main">
         <div class="activity-name">${fmtDate(d.activity.activity_date)} · ${dist} · ${dur}</div>
-        <div class="activity-meta">${escapeHtml(d.evidence)} Säkerhet: ${d.confidence}.${manual ? ' Manuell override används i grafer och planering.' : ''}</div>
+        <div class="activity-meta">${escapeHtml(d.evidence)} ${loadText} Säkerhet: ${d.confidence}.${manual ? ' Manuell override används i grafer och planering.' : ''}</div>
       </div>
       <div class="activity-right">
         <div class="activity-dist">${d.activity.avg_hr ? d.activity.avg_hr + ' bpm' : '–'}</div>
