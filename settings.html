@@ -161,7 +161,7 @@ async function loadCounts() {
 // Load saved settings
 document.getElementById('hr-max').value = localStorage.getItem('hr_max') || '190';
 renderZonePreview();
-loadCounts();
+startApp(loadCounts);
 </script>
 </body>
 </html>
