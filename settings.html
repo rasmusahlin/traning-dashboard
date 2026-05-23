@@ -57,6 +57,16 @@
     </table>
   </div>
 
+  <!-- Data export -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Dataexport</span></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="export-json-btn" onclick="exportTrainingData()">Exportera träningsdata</button>
+      <span id="export-status" style="font-size:13px;color:var(--text2)">JSON för analys</span>
+    </div>
+    <div id="export-summary" style="font-size:12px;color:var(--text3);margin-top:8px"></div>
+  </div>
+
   <!-- SQL setup reminder -->
   <div class="card">
     <div class="card-header"><span class="card-title">Databasuppsättning</span></div>
@@ -143,6 +153,94 @@ function saveSettings() {
 function copySQL() {
   const sql = document.querySelector('code').textContent;
   navigator.clipboard.writeText(sql).then(() => toast('SQL kopierat!'));
+}
+
+function readJsonSetting(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || '{}');
+  } catch(e) {
+    return {};
+  }
+}
+
+function exportFileName() {
+  const date = new Date().toISOString().slice(0, 10);
+  return `traningsdata-${date}.json`;
+}
+
+function downloadJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function fetchAllRows(table, query, label) {
+  const pageSize = 1000;
+  const rows = [];
+  let from = 0;
+  while (true) {
+    document.getElementById('export-status').textContent = `${label}: ${rows.length} rader`;
+    const page = await dbQuery(`${table}?${query}`, {
+      headers: { Range: `${from}-${from + pageSize - 1}` }
+    });
+    if (!Array.isArray(page) || !page.length) break;
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+  document.getElementById('export-status').textContent = `${label}: ${rows.length} rader`;
+  return rows;
+}
+
+async function exportTrainingData() {
+  const btn = document.getElementById('export-json-btn');
+  const status = document.getElementById('export-status');
+  const summary = document.getElementById('export-summary');
+  btn.disabled = true;
+  status.textContent = 'Förbereder export...';
+  summary.textContent = '';
+  try {
+    const tables = {
+      activities: await fetchAllRows('activities', 'order=activity_date.asc,id.asc', 'Aktiviteter'),
+      laps: await fetchAllRows('laps', 'order=activity_id.asc,lap_index.asc,id.asc', 'Laps'),
+      km_splits: await fetchAllRows('km_splits', 'order=activity_id.asc,km.asc,id.asc', 'Km-splits'),
+      time_series: await fetchAllRows('time_series', 'order=activity_id.asc,t.asc,id.asc', 'Tidsserie')
+    };
+    const { max, zones } = getHRConfig();
+    const data = {
+      manifest: {
+        app: 'traningsdashboard',
+        exported_at: new Date().toISOString(),
+        format: 'training-dashboard-export-v1',
+        source: 'supabase',
+        table_counts: Object.fromEntries(Object.entries(tables).map(([key, rows]) => [key, rows.length])),
+        includes: ['activities', 'laps', 'km_splits', 'time_series', 'local_settings']
+      },
+      local_settings: {
+        hr_max: max,
+        hr_zones: zones.map(z => ({ num:z.num, name:z.name, min:z.min, max:Number.isFinite(z.max) ? z.max : null })),
+        class_overrides: readJsonSetting('training_dashboard_class_overrides')
+      },
+      tables
+    };
+    downloadJson(data, exportFileName());
+    const counts = data.manifest.table_counts;
+    status.textContent = 'Export klar';
+    summary.textContent = `${counts.activities} pass, ${counts.laps} laps, ${counts.km_splits} km-splits, ${counts.time_series} tidsseriepunkter.`;
+    toast('Träningsdata exporterad');
+  } catch(e) {
+    console.error(e);
+    status.textContent = 'Export misslyckades';
+    summary.textContent = e.message || 'Kunde inte skapa exportfilen.';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function loadCounts() {
