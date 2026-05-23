@@ -62,7 +62,8 @@
     <div class="card-header"><span class="card-title">Dataexport</span></div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <button class="btn btn-primary" id="export-json-btn" onclick="exportTrainingData()">Exportera träningsdata</button>
-      <span id="export-status" style="font-size:13px;color:var(--text2)">JSON för analys</span>
+      <button class="btn" id="export-coach-btn" onclick="exportCoachData()">Exportera coach-analys för ChatGPT</button>
+      <span id="export-status" style="font-size:13px;color:var(--text2)">Rå JSON och coach-export</span>
     </div>
     <div id="export-summary" style="font-size:12px;color:var(--text3);margin-top:8px"></div>
   </div>
@@ -168,6 +169,11 @@ function exportFileName() {
   return `traningsdata-${date}.json`;
 }
 
+function coachExportFileName() {
+  const date = new Date().toISOString().slice(0, 10);
+  return `traningscoach-${date}.json`;
+}
+
 function downloadJson(data, filename) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -198,20 +204,597 @@ async function fetchAllRows(table, query, label) {
   return rows;
 }
 
+async function loadExportTables() {
+  return {
+    activities: await fetchAllRows('activities', 'order=activity_date.asc,id.asc', 'Aktiviteter'),
+    laps: await fetchAllRows('laps', 'order=activity_id.asc,lap_index.asc,id.asc', 'Laps'),
+    km_splits: await fetchAllRows('km_splits', 'order=activity_id.asc,km.asc,id.asc', 'Km-splits'),
+    time_series: await fetchAllRows('time_series', 'order=activity_id.asc,t.asc,id.asc', 'Tidsserie')
+  };
+}
+
+function setExportBusy(isBusy) {
+  ['export-json-btn', 'export-coach-btn'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = isBusy;
+  });
+}
+
+function finiteNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function roundNumber(value, decimals = 1) {
+  const n = finiteNumber(value);
+  if (n === null) return null;
+  const factor = Math.pow(10, decimals);
+  return Math.round(n * factor) / factor;
+}
+
+function average(values) {
+  const nums = values.map(finiteNumber).filter(v => v !== null);
+  return nums.length ? nums.reduce((sum, v) => sum + v, 0) / nums.length : null;
+}
+
+function median(values) {
+  const nums = values.map(finiteNumber).filter(v => v !== null).sort((a, b) => a - b);
+  if (!nums.length) return null;
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+}
+
+function standardDeviation(values) {
+  const nums = values.map(finiteNumber).filter(v => v !== null);
+  if (nums.length < 2) return null;
+  const avg = average(nums);
+  const variance = average(nums.map(v => Math.pow(v - avg, 2)));
+  return Math.sqrt(variance);
+}
+
+function paceSeconds(distanceMeters, durationSeconds) {
+  const dist = finiteNumber(distanceMeters);
+  const dur = finiteNumber(durationSeconds);
+  return dist && dur ? dur / (dist / 1000) : null;
+}
+
+function kmFromMeters(meters, decimals = 2) {
+  const m = finiteNumber(meters);
+  return m === null ? null : roundNumber(m / 1000, decimals);
+}
+
+function formattedPace(seconds) {
+  const p = finiteNumber(seconds);
+  return p ? `${fmtPace(p)}/km` : null;
+}
+
+function zoneForHrValue(hr, zones) {
+  const bpm = finiteNumber(hr);
+  if (bpm === null) return null;
+  return zones.find(z => bpm >= z.min && bpm < z.max) || zones[zones.length - 1] || null;
+}
+
+function zoneKey(zone) {
+  return zone ? `z${zone.num}` : null;
+}
+
+function zoneNumFromLabel(label) {
+  const match = String(label || '').match(/Z(\d)/i);
+  return match ? Number(match[1]) : null;
+}
+
+function createZoneBuckets(zones) {
+  return Object.fromEntries(zones.map(z => [
+    zoneKey(z),
+    {
+      name: z.name,
+      min_bpm: Math.round(z.min),
+      max_bpm: Number.isFinite(z.max) ? Math.round(z.max) : null,
+      seconds: 0,
+      percent: 0
+    }
+  ]));
+}
+
+function addZoneSeconds(buckets, zones, hr, seconds) {
+  const sec = finiteNumber(seconds);
+  if (!sec || sec <= 0) return false;
+  const zone = zoneForHrValue(hr, zones);
+  const key = zoneKey(zone);
+  if (!key || !buckets[key]) return false;
+  buckets[key].seconds += sec;
+  return true;
+}
+
+function finalizeZoneBuckets(buckets) {
+  const total = Object.values(buckets).reduce((sum, z) => sum + z.seconds, 0);
+  Object.values(buckets).forEach(z => {
+    z.seconds = roundNumber(z.seconds, 1) || 0;
+    z.percent = total ? roundNumber((z.seconds / total) * 100, 1) : 0;
+  });
+  const dominant = Object.entries(buckets)
+    .sort((a, b) => b[1].seconds - a[1].seconds)[0];
+  return {
+    total_seconds: roundNumber(total, 1) || 0,
+    dominant_zone: dominant && dominant[1].seconds > 0 ? dominant[0].toUpperCase() : null,
+    zones: buckets
+  };
+}
+
+function buildHrZones(activity, laps, splits, timeSeries, zones) {
+  const buckets = createZoneBuckets(zones);
+  const missing = [];
+  let source = 'none';
+  let confidence = 'low';
+
+  const ts = timeSeries
+    .map(p => ({ t: finiteNumber(p.t), hr: finiteNumber(p.hr) }))
+    .filter(p => p.t !== null && p.hr !== null)
+    .sort((a, b) => a.t - b.t);
+
+  if (ts.length >= 2) {
+    let added = 0;
+    for (let i = 0; i < ts.length - 1; i++) {
+      const delta = ts[i + 1].t - ts[i].t;
+      if (addZoneSeconds(buckets, zones, ts[i].hr, delta)) added += delta;
+    }
+    if (added > 0) {
+      source = 'time_series';
+      confidence = 'high';
+    }
+  }
+
+  if (source === 'none') {
+    const lapSegments = laps.filter(l => finiteNumber(l.avg_hr) !== null && finiteNumber(l.duration_seconds));
+    const splitSegments = splits.filter(s => finiteNumber(s.avg_hr) !== null && finiteNumber(s.duration_seconds));
+    const segments = lapSegments.length ? lapSegments : splitSegments;
+    segments.forEach(s => addZoneSeconds(buckets, zones, s.avg_hr, s.duration_seconds));
+    if (segments.length) {
+      source = lapSegments.length ? 'laps' : 'km_splits';
+      confidence = 'medium';
+    }
+  }
+
+  if (source === 'none' && activity.avg_hr && activity.duration_seconds) {
+    addZoneSeconds(buckets, zones, activity.avg_hr, activity.duration_seconds);
+    source = 'activity_average';
+    confidence = 'low';
+  }
+
+  if (source === 'none') missing.push('heart_rate');
+  const finalized = finalizeZoneBuckets(buckets);
+  return { source, confidence, ...finalized, missing_data: missing };
+}
+
+function sanitizeForCoachExport(value) {
+  const blocked = new Set(['user_id', 'access_token', 'refresh_token', 'token', 'apikey', 'authorization', 'password']);
+  if (Array.isArray(value)) return value.map(sanitizeForCoachExport);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => !blocked.has(key.toLowerCase()))
+      .map(([key, val]) => [key, sanitizeForCoachExport(val)]));
+  }
+  return value;
+}
+
+function coachLap(lap, zones) {
+  const pace = lap.avg_pace_sec_per_km || paceSeconds(lap.distance_meters, lap.duration_seconds);
+  const zone = zoneForHrValue(lap.avg_hr, zones);
+  return {
+    lap: lap.lap_index,
+    start_time: lap.start_time || null,
+    distance_km: kmFromMeters(lap.distance_meters, 3),
+    duration_seconds: finiteNumber(lap.duration_seconds),
+    duration: fmtDuration(lap.duration_seconds),
+    pace_sec_per_km: roundNumber(pace, 1),
+    pace: formattedPace(pace),
+    avg_hr: finiteNumber(lap.avg_hr),
+    max_hr: finiteNumber(lap.max_hr),
+    hr_zone: zone ? `Z${zone.num}` : null,
+    avg_cadence: finiteNumber(lap.avg_cadence),
+    elevation_gain_m: finiteNumber(lap.elevation_gain),
+    calories: finiteNumber(lap.calories),
+    trigger: lap.lap_trigger || null
+  };
+}
+
+function coachSplit(split, zones) {
+  const zone = zoneForHrValue(split.avg_hr, zones);
+  return {
+    km: split.km,
+    distance_km: kmFromMeters(split.distance_meters, 3),
+    duration_seconds: finiteNumber(split.duration_seconds),
+    duration: fmtDuration(split.duration_seconds),
+    pace_sec_per_km: roundNumber(split.pace_sec_per_km, 1),
+    pace: formattedPace(split.pace_sec_per_km),
+    avg_hr: finiteNumber(split.avg_hr),
+    hr_zone: zone ? `Z${zone.num}` : null,
+    avg_cadence: finiteNumber(split.avg_cadence),
+    elevation_gain_m: finiteNumber(split.elevation_gain),
+    partial: !!split.partial
+  };
+}
+
+function segmentFromLap(lap, zones) {
+  const pace = lap.avg_pace_sec_per_km || paceSeconds(lap.distance_meters, lap.duration_seconds);
+  const zone = zoneForHrValue(lap.avg_hr, zones);
+  return {
+    label: `Lap ${lap.lap_index}`,
+    source: 'laps',
+    index: lap.lap_index,
+    distance_meters: finiteNumber(lap.distance_meters),
+    duration_seconds: finiteNumber(lap.duration_seconds),
+    pace_sec_per_km: pace,
+    avg_hr: finiteNumber(lap.avg_hr),
+    hr_zone: zone ? `Z${zone.num}` : null,
+    avg_cadence: finiteNumber(lap.avg_cadence),
+    trigger: lap.lap_trigger || null
+  };
+}
+
+function segmentFromSplit(split, zones) {
+  const zone = zoneForHrValue(split.avg_hr, zones);
+  return {
+    label: `Km ${split.km}`,
+    source: 'km_splits',
+    index: split.km,
+    distance_meters: finiteNumber(split.distance_meters),
+    duration_seconds: finiteNumber(split.duration_seconds),
+    pace_sec_per_km: finiteNumber(split.pace_sec_per_km),
+    avg_hr: finiteNumber(split.avg_hr),
+    hr_zone: zone ? `Z${zone.num}` : null,
+    avg_cadence: finiteNumber(split.avg_cadence),
+    partial: !!split.partial
+  };
+}
+
+function coachSegment(segment, role = 'steady') {
+  return {
+    label: segment.label,
+    role,
+    distance_km: kmFromMeters(segment.distance_meters, 3),
+    duration_seconds: segment.duration_seconds,
+    duration: fmtDuration(segment.duration_seconds),
+    pace_sec_per_km: roundNumber(segment.pace_sec_per_km, 1),
+    pace: formattedPace(segment.pace_sec_per_km),
+    avg_hr: segment.avg_hr,
+    hr_zone: segment.hr_zone,
+    avg_cadence: segment.avg_cadence,
+    source: segment.source
+  };
+}
+
+function buildStructure(activity, laps, splits, zones) {
+  const lapSegments = laps.filter(l => finiteNumber(l.duration_seconds)).map(l => segmentFromLap(l, zones));
+  const splitSegments = splits.filter(s => finiteNumber(s.duration_seconds)).map(s => segmentFromSplit(s, zones));
+  const segments = lapSegments.length >= 2 ? lapSegments : splitSegments;
+  const missing = [];
+
+  if (segments.length < 2) {
+    if (!laps.length) missing.push('laps');
+    if (!splits.length) missing.push('km_splits');
+    return {
+      confidence: 'low',
+      method: 'insufficient_segment_data',
+      warmup: null,
+      main_work: [],
+      cooldown: null,
+      missing_data: missing
+    };
+  }
+
+  const paces = segments.map(s => s.pace_sec_per_km).filter(Boolean);
+  const medianPace = median(paces);
+  const hrs = segments.map(s => s.avg_hr).filter(Boolean);
+  const medianHr = median(hrs);
+  const isEasy = s => {
+    const zn = zoneNumFromLabel(s.hr_zone);
+    const slower = medianPace && s.pace_sec_per_km && s.pace_sec_per_km > medianPace * 1.05;
+    const lowerHr = medianHr && s.avg_hr && s.avg_hr < medianHr - 8;
+    return !!(slower || lowerHr || (zn && zn <= 2));
+  };
+  const isHard = s => {
+    const zn = zoneNumFromLabel(s.hr_zone);
+    const faster = medianPace && s.pace_sec_per_km && s.pace_sec_per_km < medianPace * 0.95;
+    return !!(faster || (zn && zn >= 3));
+  };
+
+  const hasWarmup = isEasy(segments[0]) && segments.length >= 3;
+  const hasCooldown = isEasy(segments[segments.length - 1]) && segments.length >= 3;
+  const start = hasWarmup ? 1 : 0;
+  const end = hasCooldown ? segments.length - 1 : segments.length;
+  const mainSegments = segments.slice(start, end);
+  const hardBlocks = mainSegments.filter(isHard);
+  const source = segments[0].source;
+  const confidence = source === 'laps' && segments.length >= 3 ? 'high' : (segments.length >= 3 ? 'medium' : 'low');
+
+  return {
+    confidence,
+    method: source === 'laps' ? 'laps_then_splits_heuristic' : 'splits_heuristic',
+    warmup: hasWarmup ? coachSegment(segments[0], 'warmup') : null,
+    main_work: mainSegments.map(s => coachSegment(s, isHard(s) ? 'hard_block' : 'steady')),
+    cooldown: hasCooldown ? coachSegment(segments[segments.length - 1], 'cooldown') : null,
+    hard_block_count: hardBlocks.length,
+    segment_count: segments.length,
+    missing_data: missing
+  };
+}
+
+function weightedPace(segments) {
+  const distance = segments.reduce((sum, s) => sum + (finiteNumber(s.distance_meters) || 0), 0);
+  const duration = segments.reduce((sum, s) => sum + (finiteNumber(s.duration_seconds) || 0), 0);
+  return distance && duration ? duration / (distance / 1000) : null;
+}
+
+function splitEdge(split) {
+  return split ? {
+    km: split.km,
+    pace_sec_per_km: roundNumber(split.pace_sec_per_km, 1),
+    pace: formattedPace(split.pace_sec_per_km),
+    avg_hr: finiteNumber(split.avg_hr),
+    partial: !!split.partial
+  } : null;
+}
+
+function buildSplitAnalysis(splits) {
+  const usable = splits.filter(s => finiteNumber(s.pace_sec_per_km) && finiteNumber(s.distance_meters));
+  if (usable.length < 2) {
+    return { available: false, missing_data: ['km_splits'] };
+  }
+
+  const paces = usable.map(s => finiteNumber(s.pace_sec_per_km));
+  const fastest = usable.reduce((best, s) => s.pace_sec_per_km < best.pace_sec_per_km ? s : best, usable[0]);
+  const slowest = usable.reduce((worst, s) => s.pace_sec_per_km > worst.pace_sec_per_km ? s : worst, usable[0]);
+  const midpoint = Math.ceil(usable.length / 2);
+  const firstHalf = usable.slice(0, midpoint);
+  const secondHalf = usable.slice(midpoint);
+  const firstPace = weightedPace(firstHalf);
+  const secondPace = weightedPace(secondHalf);
+  const paceDelta = firstPace && secondPace ? secondPace - firstPace : null;
+  const avgPace = average(paces);
+  const sd = standardDeviation(paces);
+  const firstHr = average(firstHalf.map(s => s.avg_hr));
+  const secondHr = average(secondHalf.map(s => s.avg_hr));
+  let trend = 'even';
+  if (paceDelta !== null && secondPace < firstPace * 0.98) trend = 'progressive';
+  if (paceDelta !== null && secondPace > firstPace * 1.02) trend = 'fading';
+
+  return {
+    available: true,
+    trend,
+    split_count: usable.length,
+    fastest_km: splitEdge(fastest),
+    slowest_km: splitEdge(slowest),
+    first_half_avg_pace_sec_per_km: roundNumber(firstPace, 1),
+    first_half_avg_pace: formattedPace(firstPace),
+    second_half_avg_pace_sec_per_km: roundNumber(secondPace, 1),
+    second_half_avg_pace: formattedPace(secondPace),
+    pace_delta_second_vs_first_sec_per_km: roundNumber(paceDelta, 1),
+    pace_variation_percent: avgPace && sd ? roundNumber((sd / avgPace) * 100, 1) : null,
+    hr_drift_bpm: firstHr !== null && secondHr !== null ? roundNumber(secondHr - firstHr, 1) : null,
+    missing_data: []
+  };
+}
+
+function summarizeTimeSeries(timeSeries, activity) {
+  if (!timeSeries.length) return { available: false, missing_data: ['time_series'] };
+  const nums = key => timeSeries.map(p => finiteNumber(p[key])).filter(v => v !== null);
+  const ts = nums('t');
+  const hr = nums('hr');
+  const d = nums('d');
+  const speed = nums('speed');
+  const cadence = nums('cadence');
+  const alt = nums('alt');
+  const duration = ts.length ? Math.max(...ts) - Math.min(...ts) : finiteNumber(activity.duration_seconds);
+  const distance = d.length ? Math.max(...d) : finiteNumber(activity.distance_meters);
+  const pace = paceSeconds(distance, duration);
+  const range = values => values.length ? { min: roundNumber(Math.min(...values), 1), max: roundNumber(Math.max(...values), 1), avg: roundNumber(average(values), 1) } : null;
+
+  return {
+    available: true,
+    sample_count: timeSeries.length,
+    duration_seconds: roundNumber(duration, 1),
+    distance_km: kmFromMeters(distance, 3),
+    avg_pace_sec_per_km: roundNumber(pace, 1),
+    avg_pace: formattedPace(pace),
+    has_hr: hr.length > 0,
+    has_speed: speed.length > 0,
+    has_cadence: cadence.length > 0,
+    has_elevation: alt.length > 0,
+    hr: range(hr),
+    speed_ms: range(speed),
+    cadence_spm: range(cadence),
+    elevation_m: range(alt),
+    missing_data: []
+  };
+}
+
+function buildTrainingLoad(activity, hrZones) {
+  const zoneEntries = Object.entries(hrZones.zones || {});
+  const score = zoneEntries.reduce((sum, [key, zone]) => {
+    const zoneNum = zoneNumFromLabel(key.toUpperCase()) || 1;
+    return sum + ((zone.seconds || 0) / 60) * zoneNum;
+  }, 0);
+  const fallback = finiteNumber(activity.duration_seconds) ? finiteNumber(activity.duration_seconds) / 60 : 0;
+  return {
+    estimated_load_score: Math.round(score || fallback),
+    dominant_intensity: hrZones.dominant_zone,
+    source: hrZones.source
+  };
+}
+
+function classifyWorkout(activity, structure, splitAnalysis, hrZones) {
+  const type = activity.activity_type;
+  if (type === 'strength') return 'strength';
+  if (type === 'hiking') return 'hiking';
+  if (type !== 'running') return 'manual_activity';
+
+  const distanceKm = finiteNumber(activity.distance_meters) ? finiteNumber(activity.distance_meters) / 1000 : null;
+  const durationMin = finiteNumber(activity.duration_seconds) ? finiteNumber(activity.duration_seconds) / 60 : null;
+  if (!distanceKm || !durationMin) return 'manual_activity';
+
+  const dominantZone = zoneNumFromLabel(hrZones.dominant_zone);
+  const hardBlocks = (structure.main_work || []).filter(s => s.role === 'hard_block').length;
+  const variation = splitAnalysis.pace_variation_percent || 0;
+  if (hardBlocks >= 3 && variation >= 6) return 'intervals';
+  if (splitAnalysis.trend === 'progressive') return 'progressive';
+  if (dominantZone && dominantZone >= 4) return 'tempo';
+  if (distanceKm >= 14 && (!dominantZone || dominantZone <= 3)) return 'long_run';
+  if (dominantZone && dominantZone <= 2 && durationMin <= 50) return 'easy_run';
+  return 'base_run';
+}
+
+function buildCoachSummary(activity, summary, trainingLoad, structure, splitAnalysis, missingData) {
+  const parts = [];
+  const distance = summary.distance_km ? `${summary.distance_km} km` : 'utan registrerad distans';
+  const pace = summary.avg_pace ? ` i ${summary.avg_pace}` : '';
+  parts.push(`${typeLabel(activity.activity_type)} ${activity.activity_date}: ${distance} på ${summary.duration || 'okänd tid'}${pace}.`);
+
+  if (summary.avg_hr) {
+    parts.push(`Snittpuls ${summary.avg_hr} bpm, max ${summary.max_hr || 'okänd'} bpm, främst ${trainingLoad.dominant_intensity || 'okänd zon'}.`);
+  }
+
+  if (splitAnalysis.available) {
+    const trendText = { progressive: 'progressivt', fading: 'tappande', even: 'jämnt' }[splitAnalysis.trend] || splitAnalysis.trend;
+    parts.push(`Splitsen ser ${trendText} ut; snabbast ${splitAnalysis.fastest_km?.pace || 'okänt'} och långsammast ${splitAnalysis.slowest_km?.pace || 'okänt'}.`);
+  }
+
+  if (structure.segment_count) {
+    const hard = structure.hard_block_count || 0;
+    const warm = structure.warmup ? 'med uppvärmning' : 'utan tydligt identifierad uppvärmning';
+    const cool = structure.cooldown ? 'och nedjogg' : 'och utan tydligt identifierad nedjogg';
+    parts.push(`Strukturen tolkas med ${structure.confidence} säkerhet: ${warm}, ${hard} hårda block ${cool}.`);
+  }
+
+  if (missingData.length) {
+    parts.push(`Saknar/har begränsad data för: ${missingData.join(', ')}.`);
+  }
+
+  return parts.join(' ');
+}
+
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function buildCoachActivity(activity, grouped, zones) {
+  const laps = grouped.laps || [];
+  const splits = grouped.km_splits || [];
+  const timeSeries = grouped.time_series || [];
+  const distanceKm = finiteNumber(activity.distance_meters) ? finiteNumber(activity.distance_meters) / 1000 : null;
+  const avgPace = paceSeconds(activity.distance_meters, activity.duration_seconds);
+  const summary = {
+    distance_km: roundNumber(distanceKm, 2),
+    duration_seconds: finiteNumber(activity.duration_seconds),
+    duration: fmtDuration(activity.duration_seconds),
+    moving_time_seconds: finiteNumber(activity.moving_time_seconds),
+    moving_time: fmtDuration(activity.moving_time_seconds),
+    avg_pace_sec_per_km: roundNumber(avgPace, 1),
+    avg_pace: formattedPace(avgPace),
+    avg_hr: finiteNumber(activity.avg_hr),
+    max_hr: finiteNumber(activity.max_hr),
+    avg_cadence: finiteNumber(activity.avg_cadence),
+    avg_speed_ms: finiteNumber(activity.avg_speed_ms),
+    max_speed_ms: finiteNumber(activity.max_speed_ms),
+    elevation_gain_m: finiteNumber(activity.elevation_gain_meters),
+    elevation_loss_m: finiteNumber(activity.elevation_loss_meters),
+    calories: finiteNumber(activity.calories)
+  };
+
+  const hrZones = buildHrZones(activity, laps, splits, timeSeries, zones);
+  const structure = buildStructure(activity, laps, splits, zones);
+  const splitAnalysis = buildSplitAnalysis(splits);
+  const timeSeriesSummary = summarizeTimeSeries(timeSeries, activity);
+  const trainingLoad = buildTrainingLoad(activity, hrZones);
+  trainingLoad.workout_type = classifyWorkout(activity, structure, splitAnalysis, hrZones);
+  const missingData = uniqueValues([
+    ...hrZones.missing_data,
+    ...structure.missing_data,
+    ...splitAnalysis.missing_data,
+    ...timeSeriesSummary.missing_data
+  ]);
+
+  return {
+    id: activity.id,
+    date: activity.activity_date,
+    type: activity.activity_type,
+    sport_raw: activity.sport_raw || null,
+    source: activity.filename || 'Manuell inmatning',
+    notes: activity.notes || null,
+    summary,
+    coach_summary: buildCoachSummary(activity, summary, trainingLoad, structure, splitAnalysis, missingData),
+    training_load: trainingLoad,
+    structure,
+    hr_zones: hrZones,
+    split_analysis: splitAnalysis,
+    laps: laps.map(l => coachLap(l, zones)),
+    km_splits: splits.map(s => coachSplit(s, zones)),
+    time_series_summary: timeSeriesSummary,
+    missing_data: missingData,
+    raw: {
+      activity: sanitizeForCoachExport(activity),
+      laps: sanitizeForCoachExport(laps),
+      km_splits: sanitizeForCoachExport(splits),
+      time_series: sanitizeForCoachExport(timeSeries)
+    }
+  };
+}
+
+function groupRowsByActivity(tables) {
+  const grouped = new Map();
+  (tables.activities || []).forEach(activity => grouped.set(activity.id, {
+    activity,
+    laps: [],
+    km_splits: [],
+    time_series: []
+  }));
+  ['laps', 'km_splits', 'time_series'].forEach(table => {
+    (tables[table] || []).forEach(row => {
+      if (!grouped.has(row.activity_id)) return;
+      grouped.get(row.activity_id)[table].push(row);
+    });
+  });
+  return grouped;
+}
+
+function buildCoachExportData(tables) {
+  const { max, zones } = getHRConfig();
+  const grouped = groupRowsByActivity(tables);
+  const activities = (tables.activities || []).map(activity => buildCoachActivity(activity, grouped.get(activity.id) || {}, zones));
+  const dates = activities.map(a => a.date).filter(Boolean);
+  return {
+    manifest: {
+      app: 'traningsdashboard',
+      exported_at: new Date().toISOString(),
+      format: 'training-dashboard-coach-export-v1',
+      source: 'supabase',
+      purpose: 'ChatGPT coaching analysis',
+      activity_count: activities.length,
+      period: {
+        from: dates[0] || null,
+        to: dates[dates.length - 1] || null
+      },
+      table_counts: Object.fromEntries(Object.entries(tables).map(([key, rows]) => [key, rows.length])),
+      includes: ['coach_analysis_per_activity', 'laps', 'km_splits', 'time_series_summary', 'raw_per_activity', 'local_settings']
+    },
+    local_settings: {
+      hr_max: max,
+      hr_zones: zones.map(z => ({ num:z.num, name:z.name, min_bpm:Math.round(z.min), max_bpm:Number.isFinite(z.max) ? Math.round(z.max) : null })),
+      class_overrides: readJsonSetting('training_dashboard_class_overrides')
+    },
+    activities
+  };
+}
+
 async function exportTrainingData() {
-  const btn = document.getElementById('export-json-btn');
   const status = document.getElementById('export-status');
   const summary = document.getElementById('export-summary');
-  btn.disabled = true;
+  setExportBusy(true);
   status.textContent = 'Förbereder export...';
   summary.textContent = '';
   try {
-    const tables = {
-      activities: await fetchAllRows('activities', 'order=activity_date.asc,id.asc', 'Aktiviteter'),
-      laps: await fetchAllRows('laps', 'order=activity_id.asc,lap_index.asc,id.asc', 'Laps'),
-      km_splits: await fetchAllRows('km_splits', 'order=activity_id.asc,km.asc,id.asc', 'Km-splits'),
-      time_series: await fetchAllRows('time_series', 'order=activity_id.asc,t.asc,id.asc', 'Tidsserie')
-    };
+    const tables = await loadExportTables();
     const { max, zones } = getHRConfig();
     const data = {
       manifest: {
@@ -239,7 +822,31 @@ async function exportTrainingData() {
     status.textContent = 'Export misslyckades';
     summary.textContent = e.message || 'Kunde inte skapa exportfilen.';
   } finally {
-    btn.disabled = false;
+    setExportBusy(false);
+  }
+}
+
+async function exportCoachData() {
+  const status = document.getElementById('export-status');
+  const summary = document.getElementById('export-summary');
+  setExportBusy(true);
+  status.textContent = 'Förbereder coach-export...';
+  summary.textContent = '';
+  try {
+    const tables = await loadExportTables();
+    status.textContent = 'Bygger coach-analys...';
+    const data = buildCoachExportData(tables);
+    downloadJson(data, coachExportFileName());
+    const counts = data.manifest.table_counts;
+    status.textContent = 'Coach-export klar';
+    summary.textContent = `${data.activities.length} pass analyserade, ${counts.laps} laps, ${counts.km_splits} km-splits, ${counts.time_series} tidsseriepunkter.`;
+    toast('Coach-analys exporterad');
+  } catch(e) {
+    console.error(e);
+    status.textContent = 'Coach-export misslyckades';
+    summary.textContent = e.message || 'Kunde inte skapa coach-exporten.';
+  } finally {
+    setExportBusy(false);
   }
 }
 
