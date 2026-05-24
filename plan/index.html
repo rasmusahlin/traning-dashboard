@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plan - Träningsdashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/plan.css">
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <span class="nav-brand">Träningsdashboard</span>
+    <div class="nav-links">
+      <a href="../index.html">Översikt</a>
+      <a href="../analysis.html">Analys</a>
+      <a href="../planning.html">Planering</a>
+      <a href="./" class="active">Plan</a>
+      <a href="../upload.html">Ladda upp</a>
+      <a href="../settings.html">Inställningar</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header plan-header">
+    <div>
+      <h1>Plan</h1>
+      <p id="plan-block-label">Laddar plan...</p>
+    </div>
+    <div class="plan-header-actions">
+      <button class="btn btn-sm" id="export-logs-btn" type="button">Exportera loggar</button>
+      <button class="btn btn-sm" id="import-logs-btn" type="button">Importera backup</button>
+      <input id="import-logs-file" type="file" accept="application/json,.json" hidden>
+    </div>
+  </div>
+
+  <div class="empty" id="plan-loading">Laddar träningsplan...</div>
+  <div class="card plan-error" id="plan-error" hidden></div>
+
+  <main id="plan-app" hidden>
+    <section class="plan-controls card">
+      <div class="plan-control-group">
+        <label class="plan-label" for="weight-kg">Kroppsvikt</label>
+        <div class="plan-inline-control">
+          <input class="plan-number-input" id="weight-kg" type="number" min="35" max="180" step="0.1">
+          <span class="plan-muted">kg</span>
+        </div>
+      </div>
+      <label class="plan-check">
+        <input id="four-pass-mode" type="checkbox">
+        <span>4-passläge</span>
+      </label>
+      <label class="plan-check">
+        <input id="hide-optional" type="checkbox">
+        <span>Dölj optional recovery</span>
+      </label>
+      <div class="plan-sync-note" id="sync-note">Sparar lokalt i webbläsaren.</div>
+    </section>
+
+    <section class="metrics plan-metrics" id="plan-metrics">
+      <div class="metric">
+        <div class="metric-label">Vecka</div>
+        <div class="metric-value" id="metric-week">-</div>
+        <div class="metric-sub" id="metric-week-dates"></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Planerad distans</div>
+        <div class="metric-value" id="metric-distance">-</div>
+        <div class="metric-sub" id="metric-distance-optional"></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Kvalitet</div>
+        <div class="metric-value" id="metric-quality">-</div>
+        <div class="metric-sub" id="metric-quality-sub"></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Blockstatus</div>
+        <div class="metric-value" id="metric-block">-</div>
+        <div class="metric-sub" id="metric-block-sub"></div>
+      </div>
+    </section>
+
+    <section class="plan-week-nav card">
+      <button class="btn btn-sm" id="prev-week" type="button">Föregående</button>
+      <div>
+        <div class="card-title">Veckovy</div>
+        <select id="week-select" class="plan-select" aria-label="Välj vecka"></select>
+      </div>
+      <button class="btn btn-sm" id="next-week" type="button">Nästa</button>
+    </section>
+
+    <section class="plan-layout">
+      <div>
+        <div class="card today-card" id="today-card"></div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Aktuell vecka</span>
+            <span class="plan-muted" id="week-summary-label"></span>
+          </div>
+          <div class="week-plan" id="week-plan"></div>
+        </div>
+      </div>
+
+      <aside>
+        <div class="card" id="nutrition-card"></div>
+        <div class="card" id="readiness-card"></div>
+      </aside>
+    </section>
+
+    <section class="plan-detail-grid">
+      <div class="card" id="day-detail"></div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Check-in</span>
+          <span class="plan-muted" id="checkin-date"></span>
+        </div>
+        <form id="checkin-form" class="checkin-form">
+          <label>
+            <span>Status</span>
+            <select id="checkin-status">
+              <option value="planned">Planerad</option>
+              <option value="completed">Klar</option>
+              <option value="scaled_down">Nedskalad</option>
+              <option value="skipped">Skippad</option>
+            </select>
+          </label>
+          <label>
+            <span>RPE</span>
+            <input id="checkin-rpe" type="number" min="1" max="10" step="1">
+          </label>
+          <label>
+            <span>Höftsmärta 0-10</span>
+            <input id="checkin-hip" type="number" min="0" max="10" step="1">
+          </label>
+          <label>
+            <span>Sömn 1-5</span>
+            <input id="checkin-sleep" type="number" min="1" max="5" step="1">
+          </label>
+          <label>
+            <span>Stress 1-5</span>
+            <input id="checkin-stress" type="number" min="1" max="5" step="1">
+          </label>
+          <label>
+            <span>Energi 1-5</span>
+            <input id="checkin-energy" type="number" min="1" max="5" step="1">
+          </label>
+          <label>
+            <span>Faktisk distans (km)</span>
+            <input id="checkin-distance" type="number" min="0" step="0.1">
+          </label>
+          <label>
+            <span>Faktisk tid (min)</span>
+            <input id="checkin-duration" type="number" min="0" step="1">
+          </label>
+          <label class="checkin-notes">
+            <span>Kommentar</span>
+            <textarea id="checkin-notes" rows="4"></textarea>
+          </label>
+          <div class="checkin-actions">
+            <button class="btn btn-primary" type="submit">Spara check-in</button>
+            <button class="btn" id="mark-completed" type="button">Klar</button>
+            <button class="btn" id="mark-scaled" type="button">Skala ned</button>
+            <button class="btn" id="mark-skipped" type="button">Skippa</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header block-summary-header">
+        <span class="card-title">Block summary</span>
+        <div class="block-summary-actions">
+          <button class="btn btn-sm" id="export-summary-json" type="button">JSON</button>
+          <button class="btn btn-sm" id="export-summary-csv" type="button">CSV</button>
+        </div>
+      </div>
+      <div id="block-summary"></div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="../js/db.js"></script>
+<script src="../js/plan.js"></script>
+</body>
+</html>

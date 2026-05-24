@@ -1,0 +1,377 @@
+.plan-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.plan-header-actions,
+.block-summary-actions,
+.checkin-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.plan-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.plan-control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-label,
+.plan-check,
+.checkin-form label span {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.plan-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.plan-inline-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-number-input,
+.plan-select,
+.checkin-form input,
+.checkin-form select,
+.checkin-form textarea {
+  border: 0.5px solid var(--border2);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.plan-number-input {
+  width: 84px;
+  padding: 6px 8px;
+}
+
+.plan-select {
+  padding: 5px 8px;
+  min-width: 130px;
+  margin-top: 5px;
+}
+
+.plan-muted {
+  color: var(--text3);
+  font-size: 12px;
+}
+
+.plan-sync-note {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text3);
+}
+
+.plan-error {
+  color: #e24b4a;
+}
+
+.plan-metrics .metric-value {
+  font-size: 22px;
+}
+
+.plan-week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.plan-layout,
+.plan-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+  gap: 1rem;
+}
+
+.today-card {
+  border-color: var(--border2);
+}
+
+.today-title {
+  font-size: 24px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.today-meta,
+.detail-meta,
+.week-day-meta {
+  color: var(--text2);
+  font-size: 13px;
+}
+
+.pill-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.plan-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--surface2);
+  color: var(--text2);
+  border: 0.5px solid var(--border);
+}
+
+.pill-quality { background: var(--z5); color: var(--z5t); }
+.pill-long { background: var(--z1); color: var(--z1t); }
+.pill-strength { background: #eeedfe; color: #3c3489; }
+.pill-recovery,
+.pill-easy { background: var(--z2); color: var(--z2t); }
+.pill-test { background: var(--z4); color: var(--z4t); }
+.pill-rest { background: var(--surface2); color: var(--text2); }
+
+.week-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.week-day {
+  width: 100%;
+  text-align: left;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 11px 12px;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.week-day:hover,
+.week-day.active {
+  background: var(--surface2);
+}
+
+.week-day.today {
+  border-color: var(--text);
+}
+
+.week-day.optional-muted {
+  opacity: 0.48;
+}
+
+.week-day-date {
+  font-size: 12px;
+  color: var(--text3);
+}
+
+.week-day-title {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-badge {
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--surface2);
+  color: var(--text2);
+  white-space: nowrap;
+}
+
+.status-completed { background: var(--z1); color: var(--z1t); }
+.status-scaled_down { background: var(--z3); color: var(--z3t); }
+.status-skipped { background: var(--z5); color: var(--z5t); }
+
+.detail-section {
+  margin-top: 14px;
+}
+
+.detail-section h3 {
+  font-size: 12px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+
+.detail-section p,
+.detail-section li,
+.nutrition-copy,
+.readiness-copy {
+  font-size: 14px;
+  color: var(--text2);
+  line-height: 1.55;
+}
+
+.detail-section ul {
+  padding-left: 1rem;
+}
+
+.nutrition-grid,
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.nutrition-item,
+.summary-item {
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+
+.nutrition-value,
+.summary-value {
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.nutrition-label,
+.summary-label {
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.readiness-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.readiness-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.readiness-green { background: #1d9e75; }
+.readiness-yellow { background: #ba7517; }
+.readiness-red { background: #e24b4a; }
+
+.checkin-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.checkin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.checkin-form input,
+.checkin-form select,
+.checkin-form textarea {
+  width: 100%;
+  padding: 8px;
+}
+
+.checkin-notes,
+.checkin-actions {
+  grid-column: 1 / -1;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.summary-table th,
+.summary-table td {
+  padding: 8px 6px;
+  border-bottom: 0.5px solid var(--border);
+  text-align: left;
+}
+
+.summary-table th {
+  color: var(--text3);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+@media (max-width: 850px) {
+  .plan-header,
+  .plan-week-nav {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .plan-sync-note {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  .plan-layout,
+  .plan-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .plan-header-actions,
+  .checkin-actions {
+    width: 100%;
+  }
+
+  .plan-header-actions .btn,
+  .checkin-actions .btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .week-day {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .week-day-title {
+    white-space: normal;
+  }
+
+  .checkin-form,
+  .nutrition-grid,
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-table {
+    min-width: 620px;
+  }
+
+  #block-summary {
+    overflow-x: auto;
+  }
+}

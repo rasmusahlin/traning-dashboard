@@ -1,0 +1,12 @@
+{
+  "activePlanBlockId": "sub40_plan_2026-05-25",
+  "blocks": [
+    {
+      "id": "sub40_plan_2026-05-25",
+      "title": "Sub-40 milen - block 1",
+      "path": "plans/sub40_plan_2026-05-25.json",
+      "startDate": "2026-05-25",
+      "endDate": "2026-07-19"
+    }
+  ]
+}

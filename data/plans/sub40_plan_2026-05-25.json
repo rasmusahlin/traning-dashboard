@@ -1,0 +1,1727 @@
+{
+  "metadata": {
+    "name": "Sub-40 milen – block 1",
+    "startDate": "2026-05-25",
+    "endDate": "2026-07-19",
+    "weeks": 8,
+    "goal": "Bygga mot sub-40 långsiktigt; kortsiktigt kalibrera 5 km och 10 km samt närma/attackera PB 42:20 utan att forcera.",
+    "assumptions": {
+      "qualityDays": [
+        "Tuesday",
+        "Thursday"
+      ],
+      "longRunDay": "Saturday",
+      "strengthDay": "Sunday",
+      "runDaysPerWeek": "4–5",
+      "current10kEstimate": "ca 42:15–43:00, optimistiskt PB-nära vid bra förhållanden",
+      "surface": "ofta kuperat; tempoangivelser gäller flackt och ska ersättas med ansträngning i backar"
+    }
+  },
+  "nutritionProfiles": {
+    "rest": {
+      "label": "Vilodag",
+      "protein_g_per_kg": 1.8,
+      "carbs_g_per_kg": 3.2,
+      "fat_g_per_kg": 1.0,
+      "kcal_per_kg_estimate": 29.0,
+      "timing": "Jämn energi över dagen. Ingen aktiv viktminskning. Lägg gärna kolhydrater till frukost/lunch om gårdagen var hård.",
+      "hydration": "2.0–2.5 liter vätska totalt. Minst 500 ml på morgonen."
+    },
+    "recovery": {
+      "label": "Recovery/lätt distans",
+      "protein_g_per_kg": 1.8,
+      "carbs_g_per_kg": 4.0,
+      "fat_g_per_kg": 1.0,
+      "kcal_per_kg_estimate": 32.2,
+      "timing": "Ät normalt före passet. Efter pass: protein + kolhydrater inom 1–2 h om nästa dag är kvalitet.",
+      "hydration": "2.3–2.8 liter. Extra 300–500 ml nära passet om kvällslöpning."
+    },
+    "easy": {
+      "label": "Lätt distans",
+      "protein_g_per_kg": 1.8,
+      "carbs_g_per_kg": 4.5,
+      "fat_g_per_kg": 1.0,
+      "kcal_per_kg_estimate": 34.2,
+      "timing": "Kolhydrater i måltiden före pass. Efter pass: normal middag/lunch med protein och kolhydrater.",
+      "hydration": "2.5–3.0 liter. Extra vid värme eller om urinen är mörk."
+    },
+    "quality": {
+      "label": "Kvalitetspass",
+      "protein_g_per_kg": 1.8,
+      "carbs_g_per_kg": 6.0,
+      "fat_g_per_kg": 0.9,
+      "kcal_per_kg_estimate": 39.3,
+      "timing": "30–80 g kolhydrater 1–3 h före pass. Efter pass: 20–30 g protein + 60–100 g kolhydrater beroende på aptit och passets längd.",
+      "hydration": "2.8–3.3 liter. 500 ml under eftermiddagen före kvällspass; elektrolyter vid värme."
+    },
+    "long": {
+      "label": "Långpass",
+      "protein_g_per_kg": 1.8,
+      "carbs_g_per_kg": 6.5,
+      "fat_g_per_kg": 0.9,
+      "kcal_per_kg_estimate": 41.3,
+      "timing": "Kolhydratrik frukost/måltid före. Vid pass över 80–90 min: överväg 30–45 g kolhydrater/h. Efter pass: protein + ordentligt med kolhydrater.",
+      "hydration": "3.0–3.5 liter. 500 ml före pass, vätska efter törst under pass, elektrolyter vid varmt väder."
+    },
+    "strength": {
+      "label": "Styrka/rehab",
+      "protein_g_per_kg": 1.8,
+      "carbs_g_per_kg": 4.0,
+      "fat_g_per_kg": 1.1,
+      "kcal_per_kg_estimate": 33.1,
+      "timing": "Protein jämnt över dagen. Kolhydrater behövs även här eftersom benen ska återhämta sig till tisdagens kvalitet.",
+      "hydration": "2.3–2.8 liter. Extra 300–500 ml runt passet."
+    },
+    "test": {
+      "label": "Test/race",
+      "protein_g_per_kg": 1.8,
+      "carbs_g_per_kg": 7.0,
+      "fat_g_per_kg": 0.8,
+      "kcal_per_kg_estimate": 42.4,
+      "timing": "Kolhydratrik dag. 2–3 h före test: lättsmält måltid. 20–30 min före: liten kolhydrat om magen tål. Efter: protein + kolhydrater.",
+      "hydration": "3.0–3.5 liter. Börja tidigt på dagen; undvik att panikdricka sista timmen."
+    }
+  },
+  "trainingRules": {
+    "hardness": "Max två riktiga kvalitetspass per vecka. Långpasset är normalt lätt.",
+    "thresholdFeel": "Avsluta med känslan att 5–10 min till hade varit möjligt.",
+    "vo2Feel": "Avsluta med känslan att en repetition till hade gått men varit obehaglig.",
+    "hills": "I kupering styr på ansträngning, inte fart. Jaga inte igen tid utför.",
+    "downgradeIfTired": [
+      "VO2 5×3 min blir 4×3 min",
+      "Tröskel 3×10 min blir 2×10 min",
+      "3×2 km blir 2×2 km",
+      "Långpass 18 km blir 14–15 km"
+    ],
+    "hipRule": "Smärta 0–2/10 okej. 3/10 eller smärta som ändrar steget, ökar under passet eller kvarstår dagen efter kräver nedskalning."
+  },
+  "days": [
+    {
+      "date": "2026-05-25",
+      "week": 1,
+      "weekday": "Måndag",
+      "title": "Vila + höft/rehab",
+      "workoutType": "rest_mobility",
+      "category": "rest",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "15–25 min",
+      "intensity": "Mycket lätt",
+      "workoutDetails": "15–20 min lätt höft/bål: höftlyft, sidogång med band, clam shells/sidoplanka. Ingen löpning om du inte känner dig rastlös.",
+      "nutritionProfile": "rest",
+      "coachNotes": "Starta blocket kontrollerat. Målet är rytm, inte att bevisa form.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-05-26",
+      "week": 1,
+      "weekday": "Tisdag",
+      "title": "VO2: 6 × 2 min",
+      "workoutType": "quality_vo2",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "9–11",
+      "durationRange": "50–65 min",
+      "intensity": "Hårt men kontrollerat",
+      "workoutDetails": "15 min uppvärmning + rörlighet/stegringar. 6 × 2 min @ ca 3:58–4:05/km på flackt eller motsvarande hård men repeterbar ansträngning i kupering. 2 min lugn joggvila. 10–15 min nedjogg.",
+      "nutritionProfile": "quality",
+      "coachNotes": "Du ska kunna göra en sjunde repetition om du måste. Justera fart i backe efter känsla.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-05-27",
+      "week": 1,
+      "weekday": "Onsdag",
+      "title": "Recovery",
+      "workoutType": "recovery_run",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "6–8",
+      "durationRange": "35–50 min",
+      "intensity": "Lätt/pratbart",
+      "workoutDetails": "6–8 km mycket lätt. Håll det löjligt kontrollerat. Avsluta med 5–10 min höftrehab om höften känns stel.",
+      "nutritionProfile": "recovery",
+      "coachNotes": "Kan strykas om jobb/sömn är dåligt.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-05-28",
+      "week": 1,
+      "weekday": "Torsdag",
+      "title": "Tröskel: 3 × 8 min",
+      "workoutType": "quality_threshold",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "9–11",
+      "durationRange": "55–70 min",
+      "intensity": "Kontrollerat hårt",
+      "workoutDetails": "15 min uppvärmning. 3 × 8 min @ ca 4:22–4:30/km på flackt, eller tröskelkänsla i kupering. 2 min joggvila. 10–15 min nedjogg.",
+      "nutritionProfile": "quality",
+      "coachNotes": "Avsluta med känslan att du hade kunnat göra 1 block till.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-05-29",
+      "week": 1,
+      "weekday": "Fredag",
+      "title": "Vila eller kort recovery",
+      "workoutType": "optional_recovery",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "0 eller 5–6",
+      "durationRange": "0 eller 30–40 min",
+      "intensity": "Mycket lätt",
+      "workoutDetails": "Vila. Alternativt 5–6 km mycket lätt om kroppen känns pigg och du vill landa på 5 löppass.",
+      "nutritionProfile": "rest",
+      "coachNotes": "Välj vila om benen är trötta efter tis/tors.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-05-30",
+      "week": 1,
+      "weekday": "Lördag",
+      "title": "Långpass lätt",
+      "workoutType": "long_run",
+      "category": "long",
+      "optional": false,
+      "distanceRangeKm": "14–16",
+      "durationRange": "80–95 min",
+      "intensity": "Lätt/kontrollerat",
+      "workoutDetails": "14–16 km lätt. Puls/känsla ska vara lugn; i kupering får farten variera. Inga snabba avslut denna vecka.",
+      "nutritionProfile": "long",
+      "coachNotes": "Det här ska bygga bas, inte bli ett tredje kvalitetspass.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-05-31",
+      "week": 1,
+      "weekday": "Söndag",
+      "title": "Styrka inkl. ben",
+      "workoutType": "strength",
+      "category": "strength",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "45–60 min",
+      "intensity": "Måttlig",
+      "workoutDetails": "45–60 min helkropp med ben + höftfokus. Prioritera enbensstyrka, höftstabilitet, vad och bål. Undvik failure på benövningar.",
+      "nutritionProfile": "strength",
+      "coachNotes": "Benstyrkan ska lämna dig redo för tisdag, inte sänka tisdagspasset.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-01",
+      "week": 2,
+      "weekday": "Måndag",
+      "title": "Vila + mobility",
+      "workoutType": "rest_mobility",
+      "category": "rest",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "10–20 min",
+      "intensity": "Mycket lätt",
+      "workoutDetails": "Vila. 10–20 min lätt rörlighet/höft om du är stel.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-02",
+      "week": 2,
+      "weekday": "Tisdag",
+      "title": "Fart/VO2-ekonomi: 10 × 1 min",
+      "workoutType": "quality_speed_vo2",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "8–10",
+      "durationRange": "45–60 min",
+      "intensity": "Snabbt, ej max",
+      "workoutDetails": "15 min uppvärmning + 4 korta stegringar. 10 × 1 min @ ca 3:40–3:50/km på flackt, 1 min joggvila. Nedjogg 10–15 min.",
+      "nutritionProfile": "quality",
+      "coachNotes": "Syftet är snabbhet och löpekonomi, inte syrafest. Håll tekniken avslappnad.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-03",
+      "week": 2,
+      "weekday": "Onsdag",
+      "title": "Recovery",
+      "workoutType": "recovery_run",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "6–8",
+      "durationRange": "35–50 min",
+      "intensity": "Lätt",
+      "workoutDetails": "6–8 km mycket lätt. Lägg till 4 × 15 sek avslappnade stegringar endast om benen känns fräscha.",
+      "nutritionProfile": "recovery",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-04",
+      "week": 2,
+      "weekday": "Torsdag",
+      "title": "Tröskel: 2 × 15 min",
+      "workoutType": "quality_threshold",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "10–12",
+      "durationRange": "60–75 min",
+      "intensity": "Kontrollerat hårt",
+      "workoutDetails": "15 min uppvärmning. 2 × 15 min @ ca 4:22–4:30/km. 3 min joggvila. Nedjogg 10–15 min.",
+      "nutritionProfile": "quality",
+      "coachNotes": "Det här är veckans viktigaste pass. Jämnt hellre än snabbt.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-05",
+      "week": 2,
+      "weekday": "Fredag",
+      "title": "Vila eller kort recovery",
+      "workoutType": "optional_recovery",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "0 eller 5–7",
+      "durationRange": "0 eller 30–45 min",
+      "intensity": "Mycket lätt",
+      "workoutDetails": "Vila eller 5–7 km mycket lätt. Ingen fart.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-06",
+      "week": 2,
+      "weekday": "Lördag",
+      "title": "Långpass lätt",
+      "workoutType": "long_run",
+      "category": "long",
+      "optional": false,
+      "distanceRangeKm": "15–17",
+      "durationRange": "85–105 min",
+      "intensity": "Lätt/kontrollerat",
+      "workoutDetails": "15–17 km lätt. Håll igen i backar och jaga inte tempo utför.",
+      "nutritionProfile": "long",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-07",
+      "week": 2,
+      "weekday": "Söndag",
+      "title": "Styrka inkl. ben",
+      "workoutType": "strength",
+      "category": "strength",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "45–60 min",
+      "intensity": "Måttlig",
+      "workoutDetails": "45–60 min styrka. Höftlyft, split squats/step-downs, enbens-RDL, vadpress, bål. Inget maxande.",
+      "nutritionProfile": "strength",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-08",
+      "week": 3,
+      "weekday": "Måndag",
+      "title": "Vila + höft",
+      "workoutType": "rest_mobility",
+      "category": "rest",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "15 min",
+      "intensity": "Mycket lätt",
+      "workoutDetails": "Vila. 15 min höft/bål lätt.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-09",
+      "week": 3,
+      "weekday": "Tisdag",
+      "title": "10 km-fart lätt: 4 × 1 km",
+      "workoutType": "quality_10k_specific",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "9–11",
+      "durationRange": "55–70 min",
+      "intensity": "Kontrollerat, inte max",
+      "workoutDetails": "15 min uppvärmning. 4 × 1 km @ 4:05–4:10/km, 2 min joggvila. Nedjogg 10–15 min.",
+      "nutritionProfile": "quality",
+      "coachNotes": "Ska kännas som testförberedelse, inte som test.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-10",
+      "week": 3,
+      "weekday": "Onsdag",
+      "title": "Recovery",
+      "workoutType": "recovery_run",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "5–7",
+      "durationRange": "30–45 min",
+      "intensity": "Lätt",
+      "workoutDetails": "5–7 km mycket lätt. Avbryt om benen känns slitna.",
+      "nutritionProfile": "recovery",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-11",
+      "week": 3,
+      "weekday": "Torsdag",
+      "title": "Lätt + stegringar",
+      "workoutType": "easy_strides",
+      "category": "easy",
+      "optional": false,
+      "distanceRangeKm": "5–7",
+      "durationRange": "30–45 min",
+      "intensity": "Lätt med kort fart",
+      "workoutDetails": "25–35 min lätt + 4 × 20 sek stegringar med full lugn jogg/gång tillbaka. Ingen trötthet.",
+      "nutritionProfile": "easy",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-12",
+      "week": 3,
+      "weekday": "Fredag",
+      "title": "Vila",
+      "workoutType": "rest",
+      "category": "rest",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "0",
+      "intensity": "Vila",
+      "workoutDetails": "Vila. Fokusera på sömn, kolhydrater och vätska.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-13",
+      "week": 3,
+      "weekday": "Lördag",
+      "title": "5 km test",
+      "workoutType": "test_5k",
+      "category": "test",
+      "optional": false,
+      "distanceRangeKm": "8.5–10",
+      "durationRange": "45–65 min",
+      "intensity": "Race/test",
+      "workoutDetails": "Uppvärmning 2.5–3 km + 4 stegringar. Test 5 km: öppna ca 4:05 första km, hitta 4:02–4:05, tryck efter 3 km om du har kontroll. Nedjogg 1.5–2 km.",
+      "nutritionProfile": "test",
+      "coachNotes": "A: sub 20:20, B: 20:20–20:40, stretch: sub 20. Starta inte i 3:55.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-14",
+      "week": 3,
+      "weekday": "Söndag",
+      "title": "Lätt styrka/rehab",
+      "workoutType": "light_strength",
+      "category": "strength",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "30–45 min",
+      "intensity": "Lätt–måttlig",
+      "workoutDetails": "30–45 min lättare styrka. Ingen tung benbelastning om testet satt i benen. Höft/bål prioriteras.",
+      "nutritionProfile": "strength",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-15",
+      "week": 4,
+      "weekday": "Måndag",
+      "title": "Vila",
+      "workoutType": "rest",
+      "category": "rest",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "0–30 min",
+      "intensity": "Vila/lätt",
+      "workoutDetails": "Vila eller 20–30 min promenad. Låt testet landa.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-16",
+      "week": 4,
+      "weekday": "Tisdag",
+      "title": "Lätt distans + stegringar",
+      "workoutType": "easy_strides",
+      "category": "easy",
+      "optional": false,
+      "distanceRangeKm": "8–10",
+      "durationRange": "45–65 min",
+      "intensity": "Lätt",
+      "workoutDetails": "8–10 km lätt + 6 × 20 sek avslappnade stegringar. Inga hårda intervaller.",
+      "nutritionProfile": "easy",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-17",
+      "week": 4,
+      "weekday": "Onsdag",
+      "title": "Recovery",
+      "workoutType": "recovery_run",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "0 eller 6–8",
+      "durationRange": "0 eller 35–50 min",
+      "intensity": "Lätt",
+      "workoutDetails": "6–8 km mycket lätt eller vila om testet fortfarande känns.",
+      "nutritionProfile": "recovery",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-18",
+      "week": 4,
+      "weekday": "Torsdag",
+      "title": "Tröskel: 4 × 8 min",
+      "workoutType": "quality_threshold",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "10–12",
+      "durationRange": "60–75 min",
+      "intensity": "Kontrollerat hårt",
+      "workoutDetails": "15 min uppvärmning. 4 × 8 min @ 4:20–4:28/km, 90 sek–2 min joggvila. Nedjogg.",
+      "nutritionProfile": "quality",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-19",
+      "week": 4,
+      "weekday": "Fredag",
+      "title": "Vila eller kort recovery",
+      "workoutType": "optional_recovery",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "0 eller 5–7",
+      "durationRange": "0 eller 30–45 min",
+      "intensity": "Mycket lätt",
+      "workoutDetails": "Vila eller 5–7 km mycket lätt.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-20",
+      "week": 4,
+      "weekday": "Lördag",
+      "title": "Långpass lätt",
+      "workoutType": "long_run",
+      "category": "long",
+      "optional": false,
+      "distanceRangeKm": "16–18",
+      "durationRange": "90–110 min",
+      "intensity": "Lätt/kontrollerat",
+      "workoutDetails": "16–18 km lätt. Kontrollera höft och håll jämn ansträngning i backarna.",
+      "nutritionProfile": "long",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-21",
+      "week": 4,
+      "weekday": "Söndag",
+      "title": "Styrka inkl. ben",
+      "workoutType": "strength",
+      "category": "strength",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "45–60 min",
+      "intensity": "Måttlig",
+      "workoutDetails": "45–60 min styrka. Normal belastning men lämna 2–3 reps i reserv på benövningar.",
+      "nutritionProfile": "strength",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-22",
+      "week": 5,
+      "weekday": "Måndag",
+      "title": "Vila + mobility",
+      "workoutType": "rest_mobility",
+      "category": "rest",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "10–20 min",
+      "intensity": "Mycket lätt",
+      "workoutDetails": "Vila. 10–20 min rörlighet/höft.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-23",
+      "week": 5,
+      "weekday": "Tisdag",
+      "title": "10 km-specifikt: 3 × 2 km",
+      "workoutType": "quality_10k_specific",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "11–13",
+      "durationRange": "65–80 min",
+      "intensity": "Race-kontrollerat",
+      "workoutDetails": "15 min uppvärmning. 3 × 2 km @ 4:12–4:18/km, 3 min joggvila. Nedjogg 10–15 min.",
+      "nutritionProfile": "quality",
+      "coachNotes": "Nyckelpass. Du ska inte gå i väggen. Sista 2 km ska vara starka men inte desperata.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-24",
+      "week": 5,
+      "weekday": "Onsdag",
+      "title": "Recovery",
+      "workoutType": "recovery_run",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "6–8",
+      "durationRange": "35–50 min",
+      "intensity": "Lätt",
+      "workoutDetails": "6–8 km mycket lätt. Fokus på låg belastning.",
+      "nutritionProfile": "recovery",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-25",
+      "week": 5,
+      "weekday": "Torsdag",
+      "title": "Sammanhängande tröskel",
+      "workoutType": "quality_threshold_continuous",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "9–11",
+      "durationRange": "55–70 min",
+      "intensity": "Kontrollerat hårt",
+      "workoutDetails": "15 min uppvärmning. 25–30 min sammanhängande @ 4:25–4:32/km eller tröskelkänsla i kupering. 10–15 min nedjogg.",
+      "nutritionProfile": "quality",
+      "coachNotes": "Stabilt och aerobt. Inte 10 km-race.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-26",
+      "week": 5,
+      "weekday": "Fredag",
+      "title": "Vila eller kort recovery",
+      "workoutType": "optional_recovery",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "0 eller 5–7",
+      "durationRange": "0 eller 30–45 min",
+      "intensity": "Mycket lätt",
+      "workoutDetails": "Vila eller 5–7 km mycket lätt.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-27",
+      "week": 5,
+      "weekday": "Lördag",
+      "title": "Långpass med ev. steady avslut",
+      "workoutType": "long_run",
+      "category": "long",
+      "optional": false,
+      "distanceRangeKm": "16–18",
+      "durationRange": "90–110 min",
+      "intensity": "Lätt; ev. steady",
+      "workoutDetails": "16–18 km lätt. Om kroppen känns mycket bra: sista 3 km steady ca 4:55–5:15/km, annars helt lugnt.",
+      "nutritionProfile": "long",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-28",
+      "week": 5,
+      "weekday": "Söndag",
+      "title": "Styrka inkl. ben",
+      "workoutType": "strength",
+      "category": "strength",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "45–60 min",
+      "intensity": "Måttlig",
+      "workoutDetails": "45–60 min styrka. Om lördagens avslut blev steady: håll benstyrkan något lättare.",
+      "nutritionProfile": "strength",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-29",
+      "week": 6,
+      "weekday": "Måndag",
+      "title": "Vila",
+      "workoutType": "rest",
+      "category": "rest",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "0",
+      "intensity": "Vila",
+      "workoutDetails": "Vila. Prioritera vätska och mat inför kommande kvalitet.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-06-30",
+      "week": 6,
+      "weekday": "Tisdag",
+      "title": "VO2: 5 × 3 min",
+      "workoutType": "quality_vo2",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "9–11",
+      "durationRange": "55–70 min",
+      "intensity": "Hårt men repeterbart",
+      "workoutDetails": "15 min uppvärmning + stegringar. 5 × 3 min @ 3:58–4:05/km, 2–3 min joggvila. Nedjogg.",
+      "nutritionProfile": "quality",
+      "coachNotes": "Om stress/sömn är dålig: kör 4 × 3 min.",
+      "downgradeIfTired": [
+        "VO2 5 × 3 min blir 4 × 3 min."
+      ],
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-01",
+      "week": 6,
+      "weekday": "Onsdag",
+      "title": "Recovery",
+      "workoutType": "recovery_run",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "0 eller 6–8",
+      "durationRange": "0 eller 35–50 min",
+      "intensity": "Lätt",
+      "workoutDetails": "6–8 km mycket lätt eller vila vid tunga ben.",
+      "nutritionProfile": "recovery",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-02",
+      "week": 6,
+      "weekday": "Torsdag",
+      "title": "Tröskel: 3 × 10 min",
+      "workoutType": "quality_threshold",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "10–12",
+      "durationRange": "60–75 min",
+      "intensity": "Kontrollerat hårt",
+      "workoutDetails": "15 min uppvärmning. 3 × 10 min @ 4:20–4:28/km, 2 min joggvila. Nedjogg.",
+      "nutritionProfile": "quality",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-03",
+      "week": 6,
+      "weekday": "Fredag",
+      "title": "Vila eller kort recovery",
+      "workoutType": "optional_recovery",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "0 eller 5–7",
+      "durationRange": "0 eller 30–45 min",
+      "intensity": "Mycket lätt",
+      "workoutDetails": "Vila eller 5–7 km mycket lätt.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-04",
+      "week": 6,
+      "weekday": "Lördag",
+      "title": "Långpass lätt",
+      "workoutType": "long_run",
+      "category": "long",
+      "optional": false,
+      "distanceRangeKm": "15–17",
+      "durationRange": "85–105 min",
+      "intensity": "Lätt",
+      "workoutDetails": "15–17 km lätt. Ingen snabb avslutning denna vecka.",
+      "nutritionProfile": "long",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-05",
+      "week": 6,
+      "weekday": "Söndag",
+      "title": "Styrka inkl. ben",
+      "workoutType": "strength",
+      "category": "strength",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "45–60 min",
+      "intensity": "Måttlig",
+      "workoutDetails": "45–60 min styrka. Normal men inte maximal belastning.",
+      "nutritionProfile": "strength",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-06",
+      "week": 7,
+      "weekday": "Måndag",
+      "title": "Vila + höft",
+      "workoutType": "rest_mobility",
+      "category": "rest",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "10–15 min",
+      "intensity": "Mycket lätt",
+      "workoutDetails": "Vila. 10–15 min lätt höft/bål.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-07",
+      "week": 7,
+      "weekday": "Tisdag",
+      "title": "Testförberedelse: 3 × 1 km",
+      "workoutType": "quality_10k_specific",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "8–10",
+      "durationRange": "45–60 min",
+      "intensity": "Kontrollerat",
+      "workoutDetails": "15 min uppvärmning. 3 × 1 km @ 4:10–4:14/km, 2 min joggvila. Nedjogg. Ska kännas lätt-kontrollerat.",
+      "nutritionProfile": "quality",
+      "coachNotes": "Detta är en kalibrering, inte en tömning.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-08",
+      "week": 7,
+      "weekday": "Onsdag",
+      "title": "Recovery",
+      "workoutType": "recovery_run",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "0 eller 5–7",
+      "durationRange": "0 eller 30–45 min",
+      "intensity": "Lätt",
+      "workoutDetails": "5–7 km mycket lätt eller vila om du vill vara extra fräsch.",
+      "nutritionProfile": "recovery",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-09",
+      "week": 7,
+      "weekday": "Torsdag",
+      "title": "Lätt + stegringar",
+      "workoutType": "easy_strides",
+      "category": "easy",
+      "optional": false,
+      "distanceRangeKm": "5–7",
+      "durationRange": "30–45 min",
+      "intensity": "Lätt med kort fart",
+      "workoutDetails": "25–35 min lätt + 4 × 20 sek stegringar. Sluta medan det känns piggt.",
+      "nutritionProfile": "easy",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-10",
+      "week": 7,
+      "weekday": "Fredag",
+      "title": "Vila",
+      "workoutType": "rest",
+      "category": "rest",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "0",
+      "intensity": "Vila",
+      "workoutDetails": "Vila. Kolhydrater, vätska, sömn. Ingen extra styrka.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-11",
+      "week": 7,
+      "weekday": "Lördag",
+      "title": "10 km test/PB-försök",
+      "workoutType": "test_10k",
+      "category": "test",
+      "optional": false,
+      "distanceRangeKm": "13–15",
+      "durationRange": "65–85 min inkl. upp/ned",
+      "intensity": "Race/test",
+      "workoutDetails": "Uppvärmning 2–3 km + 4 stegringar. 10 km test på flackaste möjliga rutt/bana. Pacing: första 3–5 km runt 4:15/km, därefter 4:13–4:15 om kontroll, tryck sista 2–3 km. Nedjogg 1–2 km.",
+      "nutritionProfile": "test",
+      "coachNotes": "A: PB/sub 42:20. B: 42:30–43:00. Viktigast: jämn öppning utan kollaps.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-12",
+      "week": 7,
+      "weekday": "Söndag",
+      "title": "Lätt styrka/rehab",
+      "workoutType": "light_strength",
+      "category": "strength",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "30–45 min",
+      "intensity": "Lätt–måttlig",
+      "workoutDetails": "30–45 min lätt styrka/rehab. Ingen tung benstyrka om testet satt i kroppen.",
+      "nutritionProfile": "strength",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-13",
+      "week": 8,
+      "weekday": "Måndag",
+      "title": "Vila",
+      "workoutType": "rest",
+      "category": "rest",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "0–30 min",
+      "intensity": "Vila/lätt",
+      "workoutDetails": "Vila eller promenad. Låt testveckan absorberas.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-14",
+      "week": 8,
+      "weekday": "Tisdag",
+      "title": "Lätt distans",
+      "workoutType": "easy_run",
+      "category": "easy",
+      "optional": false,
+      "distanceRangeKm": "8–10",
+      "durationRange": "45–65 min",
+      "intensity": "Lätt",
+      "workoutDetails": "8–10 km lätt. Inga krav på tempo. Känn efter hur kroppen svarat på testet.",
+      "nutritionProfile": "easy",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-15",
+      "week": 8,
+      "weekday": "Onsdag",
+      "title": "Recovery",
+      "workoutType": "recovery_run",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "0 eller 5–8",
+      "durationRange": "0 eller 30–50 min",
+      "intensity": "Lätt",
+      "workoutDetails": "5–8 km mycket lätt eller vila om återhämtningen inte är klar.",
+      "nutritionProfile": "recovery",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-16",
+      "week": 8,
+      "weekday": "Torsdag",
+      "title": "Tröskel: 2 × 12 min",
+      "workoutType": "quality_threshold",
+      "category": "quality",
+      "optional": false,
+      "distanceRangeKm": "8–10",
+      "durationRange": "50–65 min",
+      "intensity": "Kontrollerat",
+      "workoutDetails": "15 min uppvärmning. 2 × 12 min @ 4:22–4:30/km, 2–3 min joggvila. Nedjogg.",
+      "nutritionProfile": "quality",
+      "coachNotes": "Ska kännas som att du är tillbaka i träning, inte som en ny tävling.",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-17",
+      "week": 8,
+      "weekday": "Fredag",
+      "title": "Vila eller kort recovery",
+      "workoutType": "optional_recovery",
+      "category": "recovery",
+      "optional": true,
+      "distanceRangeKm": "0 eller 5–7",
+      "durationRange": "0 eller 30–45 min",
+      "intensity": "Mycket lätt",
+      "workoutDetails": "Vila eller 5–7 km mycket lätt.",
+      "nutritionProfile": "rest",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-18",
+      "week": 8,
+      "weekday": "Lördag",
+      "title": "Långpass lätt",
+      "workoutType": "long_run",
+      "category": "long",
+      "optional": false,
+      "distanceRangeKm": "14–16",
+      "durationRange": "80–95 min",
+      "intensity": "Lätt",
+      "workoutDetails": "14–16 km lätt. Inget tempojagande. Bra steg och låg belastning.",
+      "nutritionProfile": "long",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-19",
+      "week": 8,
+      "weekday": "Söndag",
+      "title": "Styrka inkl. ben",
+      "workoutType": "strength",
+      "category": "strength",
+      "optional": false,
+      "distanceRangeKm": "0",
+      "durationRange": "45–60 min",
+      "intensity": "Måttlig",
+      "workoutDetails": "45–60 min styrka med höftfokus. Normalisera rutinen inför nästa block.",
+      "nutritionProfile": "strength",
+      "coachNotes": "",
+      "completion": {
+        "planned": true,
+        "status": "not_started",
+        "fieldsToLog": [
+          "done",
+          "actualDistanceKm",
+          "actualDuration",
+          "rpe_1_10",
+          "sleep_1_5",
+          "stress_1_5",
+          "hipPain_0_10",
+          "notes"
+        ]
+      }
+    }
+  ]
+}
