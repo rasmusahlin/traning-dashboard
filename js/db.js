@@ -225,19 +225,46 @@ async function dbInsert(table, data, opts = {}) {
   });
 }
 
-// HR zone config (editable via settings)
-function getHRConfig() {
-  const max = parseInt(localStorage.getItem('hr_max') || '190');
+// HR zone config (editable via settings). Uses the Karvonen method / HR reserve.
+const DEFAULT_HR_MAX = 190;
+const DEFAULT_HR_REST = 60;
+const HR_ZONE_DEFS = [
+  { num: 1, name: 'Z1 Återhämtning', minPct: 0.00, maxPct: 0.60, label: '<60% HRR',   color: '#1d9e75' },
+  { num: 2, name: 'Z2 Aerob bas',    minPct: 0.60, maxPct: 0.70, label: '60–70% HRR', color: '#185FA5' },
+  { num: 3, name: 'Z3 Tempo',        minPct: 0.70, maxPct: 0.80, label: '70–80% HRR', color: '#ba7517' },
+  { num: 4, name: 'Z4 Tröskel',      minPct: 0.80, maxPct: 0.90, label: '80–90% HRR', color: '#d85a30' },
+  { num: 5, name: 'Z5 Max',          minPct: 0.90, maxPct: 1.00, label: '90–100% HRR', color: '#e24b4a' }
+];
+
+function validInt(value, fallback, min, max) {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n >= min && n <= max ? n : fallback;
+}
+
+function buildHRConfig(maxInput = DEFAULT_HR_MAX, restInput = DEFAULT_HR_REST) {
+  const max = validInt(maxInput, DEFAULT_HR_MAX, 100, 240);
+  const rest = Math.min(validInt(restInput, DEFAULT_HR_REST, 30, 120), max - 1);
+  const reserve = max - rest;
+  const bpmAt = pct => rest + reserve * pct;
   return {
+    method: 'karvonen',
     max,
-    zones: [
-      { num: 1, name: 'Z1 Återhämtning', min: 0,        max: max * 0.60, color: '#1d9e75' },
-      { num: 2, name: 'Z2 Aerob bas',    min: max * 0.60, max: max * 0.70, color: '#185FA5' },
-      { num: 3, name: 'Z3 Tempo',        min: max * 0.70, max: max * 0.80, color: '#ba7517' },
-      { num: 4, name: 'Z4 Tröskel',      min: max * 0.80, max: max * 0.90, color: '#d85a30' },
-      { num: 5, name: 'Z5 Max',          min: max * 0.90, max: Infinity,   color: '#e24b4a' }
-    ]
+    rest,
+    resting: rest,
+    reserve,
+    zones: HR_ZONE_DEFS.map(z => ({
+      ...z,
+      min: bpmAt(z.minPct),
+      max: z.num === 5 ? Infinity : bpmAt(z.maxPct)
+    }))
   };
+}
+
+function getHRConfig() {
+  return buildHRConfig(
+    localStorage.getItem('hr_max') || DEFAULT_HR_MAX,
+    localStorage.getItem('hr_rest') || DEFAULT_HR_REST
+  );
 }
 
 function hrZone(bpm) {

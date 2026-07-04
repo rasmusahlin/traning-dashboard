@@ -33,12 +33,23 @@
     <div class="card-header"><span class="card-title">Pulszoner</span></div>
 
     <div style="margin-bottom:1.5rem">
-      <label style="font-size:14px;font-weight:500;display:block;margin-bottom:6px">Maxpuls</label>
-      <div style="display:flex;align-items:center;gap:12px">
-        <input type="number" id="hr-max" value="190" min="140" max="220" style="width:80px;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:16px">
-        <span style="font-size:14px;color:var(--text2)">bpm</span>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(140px,1fr));gap:12px;max-width:360px">
+        <div>
+          <label style="font-size:14px;font-weight:500;display:block;margin-bottom:6px">Vilopuls</label>
+          <div style="display:flex;align-items:center;gap:12px">
+            <input type="number" id="hr-rest" value="60" min="30" max="120" style="width:90px;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:16px">
+            <span style="font-size:14px;color:var(--text2)">bpm</span>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:14px;font-weight:500;display:block;margin-bottom:6px">Maxpuls</label>
+          <div style="display:flex;align-items:center;gap:12px">
+            <input type="number" id="hr-max" value="190" min="100" max="240" style="width:90px;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:16px">
+            <span style="font-size:14px;color:var(--text2)">bpm</span>
+          </div>
+        </div>
       </div>
-      <p style="font-size:13px;color:var(--text3);margin-top:6px">Nuvarande: 190 bpm (uppdatera när du vet din verkliga maxpuls)</p>
+      <p id="hr-current" style="font-size:13px;color:var(--text3);margin-top:8px"></p>
     </div>
 
     <div id="zone-preview"><!-- rendered by JS --></div>
@@ -121,31 +132,44 @@ create table if not exists time_series (
 <script src="js/db.js"></script>
 <script>
 function renderZonePreview() {
-  const max = parseInt(document.getElementById('hr-max').value) || 190;
-  const zones = [
-    { num:1, name:'Z1 Återhämtning', pct:'<60%',  color:'#1d9e75' },
-    { num:2, name:'Z2 Aerob bas',    pct:'60–70%', color:'#185FA5' },
-    { num:3, name:'Z3 Tempo',        pct:'70–80%', color:'#ba7517' },
-    { num:4, name:'Z4 Tröskel',      pct:'80–90%', color:'#d85a30' },
-    { num:5, name:'Z5 Max',          pct:'90–100%',color:'#e24b4a' }
-  ];
-  const thresholds = [0, 0.60, 0.70, 0.80, 0.90, 1.0];
+  const restInput = document.getElementById('hr-rest');
+  const maxInput = document.getElementById('hr-max');
+  const rest = parseInt(restInput.value, 10);
+  const max = parseInt(maxInput.value, 10);
+  const msg = document.getElementById('save-msg');
+  if (!Number.isFinite(rest) || !Number.isFinite(max) || rest < 30 || rest > 120 || max < 100 || max > 240 || rest >= max) {
+    document.getElementById('zone-preview').innerHTML =
+      '<div class="empty" style="padding:1.5rem">Ange vilopuls 30–120 bpm och maxpuls 100–240 bpm. Vilopuls behöver vara lägre än maxpuls.</div>';
+    document.getElementById('hr-current').textContent = '';
+    if (msg) msg.textContent = '';
+    return;
+  }
+  const cfg = buildHRConfig(max, rest);
+  document.getElementById('hr-current').textContent =
+    `Karvonen: vilopuls ${cfg.rest} bpm · maxpuls ${cfg.max} bpm · pulsreserv ${cfg.reserve} bpm`;
   document.getElementById('zone-preview').innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
-      ${zones.map((z,i) => `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
+      ${cfg.zones.map(z => `
         <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center">
           <span class="zone-badge z${z.num}" style="margin-bottom:6px;display:inline-block">Z${z.num}</span>
           <div style="font-size:12px;color:var(--text2);margin-bottom:2px">${z.name.split(' ').slice(1).join(' ')}</div>
-          <div style="font-size:13px;font-weight:500">${Math.round(thresholds[i]*max)}–${i<4?Math.round(thresholds[i+1]*max):max} bpm</div>
-          <div style="font-size:11px;color:var(--text3)">${z.pct}</div>
+          <div style="font-size:13px;font-weight:500">${Math.round(z.min)}–${z.max===Infinity?cfg.max:Math.round(z.max)} bpm</div>
+          <div style="font-size:11px;color:var(--text3)">${z.label}</div>
         </div>`).join('')}
     </div>`;
 }
 
+document.getElementById('hr-rest').addEventListener('input', renderZonePreview);
 document.getElementById('hr-max').addEventListener('input', renderZonePreview);
 
 function saveSettings() {
-  const max = document.getElementById('hr-max').value;
+  const rest = parseInt(document.getElementById('hr-rest').value, 10);
+  const max = parseInt(document.getElementById('hr-max').value, 10);
+  if (!Number.isFinite(rest) || !Number.isFinite(max) || rest < 30 || rest > 120 || max < 100 || max > 240 || rest >= max) {
+    document.getElementById('save-msg').textContent = 'Kontrollera pulsvärdena.';
+    return;
+  }
+  localStorage.setItem('hr_rest', rest);
   localStorage.setItem('hr_max', max);
   document.getElementById('save-msg').textContent = 'Sparat!';
   setTimeout(() => document.getElementById('save-msg').textContent = '', 2000);
@@ -290,6 +314,8 @@ function createZoneBuckets(zones) {
     zoneKey(z),
     {
       name: z.name,
+      min_hrr_percent: Math.round(z.minPct * 100),
+      max_hrr_percent: Math.round(z.maxPct * 100),
       min_bpm: Math.round(z.min),
       max_bpm: Number.isFinite(z.max) ? Math.round(z.max) : null,
       seconds: 0,
@@ -760,7 +786,7 @@ function groupRowsByActivity(tables) {
 }
 
 function buildCoachExportData(tables) {
-  const { max, zones } = getHRConfig();
+  const { max, rest, reserve, method, zones } = getHRConfig();
   const grouped = groupRowsByActivity(tables);
   const activities = (tables.activities || []).map(activity => buildCoachActivity(activity, grouped.get(activity.id) || {}, zones));
   const dates = activities.map(a => a.date).filter(Boolean);
@@ -780,8 +806,18 @@ function buildCoachExportData(tables) {
       includes: ['coach_analysis_per_activity', 'laps', 'km_splits', 'time_series_summary', 'raw_per_activity', 'local_settings']
     },
     local_settings: {
+      hr_method: method,
+      hr_rest: rest,
       hr_max: max,
-      hr_zones: zones.map(z => ({ num:z.num, name:z.name, min_bpm:Math.round(z.min), max_bpm:Number.isFinite(z.max) ? Math.round(z.max) : null })),
+      hr_reserve: reserve,
+      hr_zones: zones.map(z => ({
+        num:z.num,
+        name:z.name,
+        min_hrr_percent:Math.round(z.minPct * 100),
+        max_hrr_percent:Math.round(z.maxPct * 100),
+        min_bpm:Math.round(z.min),
+        max_bpm:Number.isFinite(z.max) ? Math.round(z.max) : null
+      })),
       class_overrides: readJsonSetting('training_dashboard_class_overrides')
     },
     activities
@@ -796,7 +832,7 @@ async function exportTrainingData() {
   summary.textContent = '';
   try {
     const tables = await loadExportTables();
-    const { max, zones } = getHRConfig();
+    const { max, rest, reserve, method, zones } = getHRConfig();
     const data = {
       manifest: {
         app: 'traningsdashboard',
@@ -807,8 +843,18 @@ async function exportTrainingData() {
         includes: ['activities', 'laps', 'km_splits', 'time_series', 'local_settings']
       },
       local_settings: {
+        hr_method: method,
+        hr_rest: rest,
         hr_max: max,
-        hr_zones: zones.map(z => ({ num:z.num, name:z.name, min:z.min, max:Number.isFinite(z.max) ? z.max : null })),
+        hr_reserve: reserve,
+        hr_zones: zones.map(z => ({
+          num:z.num,
+          name:z.name,
+          min_hrr_percent:z.minPct * 100,
+          max_hrr_percent:z.maxPct * 100,
+          min:z.min,
+          max:Number.isFinite(z.max) ? z.max : null
+        })),
         class_overrides: readJsonSetting('training_dashboard_class_overrides')
       },
       tables
@@ -865,7 +911,8 @@ async function loadCounts() {
 }
 
 // Load saved settings
-document.getElementById('hr-max').value = localStorage.getItem('hr_max') || '190';
+document.getElementById('hr-rest').value = localStorage.getItem('hr_rest') || DEFAULT_HR_REST;
+document.getElementById('hr-max').value = localStorage.getItem('hr_max') || DEFAULT_HR_MAX;
 renderZonePreview();
 startApp(loadCounts);
 </script>
