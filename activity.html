@@ -106,7 +106,7 @@ function render(act, laps, splits) {
     ${act.avg_hr ? `
     <div id="tab-zones" class="tab-panel">
       <div class="card">
-        <div class="card-header"><span class="card-title">HR-zonsfördelning</span><span style="font-size:12px;color:var(--text3)">Maxpuls: ${hrCfg.max} bpm</span></div>
+        <div class="card-header"><span class="card-title">HR-zonsfördelning</span><span style="font-size:12px;color:var(--text3)">Karvonen: vila ${hrCfg.rest} bpm · max ${hrCfg.max} bpm</span></div>
         <div id="zone-bars">Laddar...</div>
       </div>
     </div>` : ''}
@@ -226,12 +226,13 @@ function renderZoneBars(act) {
   if (!el) return;
   // Show static zone reference with avg HR marker
   const avgHR = act.avg_hr || 0;
+  const avgZone = avgHR ? hrZone(avgHR) : null;
   el.innerHTML = zones.map(z => {
-    const inZone = avgHR >= z.min && avgHR < z.max;
+    const inZone = avgZone && avgZone.num === z.num;
     return `<div class="zone-row">
       <div class="zone-label"><span class="zone-badge z${z.num}">Z${z.num}</span></div>
       <div style="flex:1">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:3px">${z.name} · ${Math.round(z.min)}–${z.max===Infinity?max:Math.round(z.max)} bpm</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:3px">${z.name} · ${Math.round(z.min)}–${z.max===Infinity?max:Math.round(z.max)} bpm · ${z.label}</div>
         <div class="zone-bar-wrap"><div class="zone-bar-inner" style="width:${inZone?'60':'15'}%;background:${z.color}"></div></div>
       </div>
       ${inZone ? `<span style="font-size:12px;color:var(--text2)">snitt ${avgHR} bpm</span>` : '<span></span>'}

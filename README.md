@@ -32,7 +32,7 @@ Gå till ditt Supabase-projekt → SQL Editor och kör `schema.sql` (finns i det
 - **Översikt**: veckovolym, pace-trend, HR-trend, aktivitetslista
 - **Pass-detaljer**: km-splits med pace + HR per km, lap-data, HR-zoner, pace/elevation-graf
 - **Upload**: FIT-parsning direkt i webbläsaren, allt sparas i Supabase
-- **Inställningar**: konfigurerbar maxpuls och HR-zoner
+- **Inställningar**: konfigurerbar vilopuls, maxpuls och Karvonen-baserade HR-zoner
 
 ## Databasstruktur
 
@@ -44,7 +44,7 @@ Gå till ditt Supabase-projekt → SQL Editor och kör `schema.sql` (finns i det
 ## Anpassa
 
 Ändra Supabase URL/nyckel i `js/db.js` om du byter projekt.
-Maxpuls och HR-zoner konfigureras under Inställningar och sparas i localStorage.
+Vilopuls, maxpuls och HR-zoner konfigureras under Inställningar och sparas i localStorage. Zonerna beräknas med Karvonen-metoden: vilopuls + procent av pulsreserv.
 
 ## Säkerhet
 
