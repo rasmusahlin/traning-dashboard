@@ -125,6 +125,13 @@ nav {
 }
 .activity-item:last-child { border-bottom: none; }
 .activity-item:hover { opacity: 0.75; }
+.activity-item.activity-row { cursor: default; gap: 8px; padding: 0; }
+.activity-item.activity-row:hover { opacity: 1; }
+.activity-link {
+  display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0;
+  padding: 12px 0; color: inherit; text-decoration: none;
+}
+.activity-link:hover { opacity: 0.75; }
 .activity-dot {
   width: 36px; height: 36px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;

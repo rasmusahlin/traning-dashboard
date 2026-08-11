@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://mpmtvydpiihfltldaxkt.supabase.co; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Träningsdashboard</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -30,9 +31,9 @@
 
   <!-- Filter row -->
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:1.5rem">
-    <span style="font-size:13px;color:var(--text2)">Från:</span>
+    <label for="filter-from" style="font-size:13px;color:var(--text2)">Från:</label>
     <input type="date" id="filter-from" style="font-size:13px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text)">
-    <span style="font-size:13px;color:var(--text2)">Till:</span>
+    <label for="filter-to" style="font-size:13px;color:var(--text2)">Till:</label>
     <input type="date" id="filter-to" style="font-size:13px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text)">
     <button class="btn btn-sm" onclick="setQuick(30)">30 d</button>
     <button class="btn btn-sm" onclick="setQuick(90)">3 mån</button>
@@ -102,7 +103,7 @@
     <div class="card-header">
       <span class="card-title">Aktiviteter</span>
       <div style="display:flex;gap:6px;align-items:center">
-        <select id="type-filter" onchange="renderList()" style="font-size:12px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text)">
+        <select id="type-filter" aria-label="Filtrera aktivitetstyp" onchange="renderList()" style="font-size:12px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text)">
           <option value="all">Alla typer</option>
           <option value="running">Löpning</option>
           <option value="strength">Styrka</option>
@@ -120,12 +121,14 @@
 <div id="toast" class="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="js/security.js"></script>
 <script src="js/db.js"></script>
 <script>
 let allActivities = [];
 let showAll = false;
 let charts = {};
 let confirmDeleteId = null;
+let deleteModalState = null;
 
 // Init date range to last 90 days
 function initDates() {
@@ -151,8 +154,8 @@ function setQuick(days) {
 async function init() {
   initDates();
   try {
-    allActivities = await dbQuery('activities?order=activity_date.desc&limit=1000');
-    setConnected(true);
+    allActivities = await dbQueryAll('activities?order=activity_date.desc,id.desc');
+    setConnected(true, `${allActivities.length} pass hämtade`);
   } catch(e) {
     setConnected(false);
     console.error('DB-fel:', e);
@@ -165,9 +168,11 @@ async function init() {
   }
 }
 
-function setConnected(ok) {
+function setConnected(ok, detail = '') {
   document.getElementById('conn-dot').className = 'status-dot ' + (ok ? 'status-ok' : 'status-err');
-  document.getElementById('conn-text').textContent = ok ? 'Ansluten till Supabase' : 'Anslutningsfel – kontrollera nätverket';
+  document.getElementById('conn-text').textContent = ok
+    ? `Ansluten till Supabase${detail ? ' · ' + detail : ''}`
+    : 'Kunde inte hämta data – kontrollera anslutningen och försök igen';
 }
 
 function toggleAll() {
@@ -230,11 +235,19 @@ function renderList() {
   if (typeF !== 'all') acts = acts.filter(a => a.activity_type === typeF);
   const display = showAll ? acts : acts.slice(0, 15);
   const el = document.getElementById('activity-list');
+  el.replaceChildren();
   if (!acts.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">◎</div>Inga aktiviteter i valt tidsintervall</div>';
+    const empty = makeTextElement('div', 'empty', 'Inga aktiviteter i valt tidsintervall');
+    empty.prepend(makeTextElement('div', 'empty-icon', '◎'));
+    el.appendChild(empty);
     return;
   }
-  el.innerHTML = display.map(a => {
+
+  display.forEach(a => {
+    if (!AppSecurity.isUuid(a.id)) {
+      console.warn('Aktivitet med ogiltigt ID hoppades över.');
+      return;
+    }
     const dist = a.distance_meters ? (a.distance_meters/1000).toFixed(1) + ' km' : (a.activity_type === 'strength' ? '–' : '–');
     const dur  = fmtDuration(a.duration_seconds);
     const pace = a.activity_type === 'running' ?
@@ -242,49 +255,112 @@ function renderList() {
     const meta = fmtDate(a.activity_date) + ' · ' + dur +
       (a.avg_hr ? ' · ' + a.avg_hr + ' bpm' : '') +
       (a.elevation_gain_meters ? ' · +' + Math.round(a.elevation_gain_meters) + 'm' : '');
-    return `<div class="activity-item" style="position:relative" onclick="location.href='activity.html?id=${a.id}'">
-      <div class="activity-dot ${typeDotClass(a.activity_type)}">${typeDot(a.activity_type)}</div>
-      <div class="activity-main">
-        <div class="activity-name">${typeLabel(a.activity_type)}${a.notes ? ' · ' + a.notes.slice(0,40) : ''}</div>
-        <div class="activity-meta">${meta}</div>
-      </div>
-      <div class="activity-right">
-        <div class="activity-dist">${dist}</div>
-        <div class="activity-pace">${pace ? pace+'/km' : ''}</div>
-      </div>
-      <button onclick="event.stopPropagation();confirmDelete('${a.id}','${typeLabel(a.activity_type)} ${a.activity_date}')"
-        style="margin-left:8px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:6px;background:none;color:var(--text3);font-size:12px;cursor:pointer;flex-shrink:0"
-        title="Ta bort pass">✕</button>
-    </div>`;
-  }).join('');
+
+    const row = makeTextElement('div', 'activity-item activity-row');
+    row.style.position = 'relative';
+    const link = makeTextElement('a', 'activity-link');
+    link.href = 'activity.html?id=' + encodeURIComponent(a.id);
+
+    link.appendChild(makeTextElement('div', `activity-dot ${typeDotClass(a.activity_type)}`, typeDot(a.activity_type)));
+    const main = makeTextElement('div', 'activity-main');
+    const notes = a.notes ? ' · ' + String(a.notes).slice(0, 40) : '';
+    main.appendChild(makeTextElement('div', 'activity-name', typeLabel(a.activity_type) + notes));
+    main.appendChild(makeTextElement('div', 'activity-meta', meta));
+    link.appendChild(main);
+
+    const right = makeTextElement('div', 'activity-right');
+    right.appendChild(makeTextElement('div', 'activity-dist', dist));
+    right.appendChild(makeTextElement('div', 'activity-pace', pace ? pace + '/km' : ''));
+    link.appendChild(right);
+    row.appendChild(link);
+
+    const deleteButton = makeTextElement('button', '', '✕');
+    deleteButton.type = 'button';
+    deleteButton.title = 'Ta bort pass';
+    deleteButton.style.cssText = 'margin-left:8px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:6px;background:none;color:var(--text3);font-size:12px;cursor:pointer;flex-shrink:0';
+    deleteButton.setAttribute('aria-label', `Ta bort ${typeLabel(a.activity_type)} ${a.activity_date}`);
+    deleteButton.addEventListener('click', () => confirmDelete(a.id, `${typeLabel(a.activity_type)} ${a.activity_date}`));
+    row.appendChild(deleteButton);
+    el.appendChild(row);
+  });
   document.getElementById('show-all-btn').textContent = showAll || acts.length <= 15 ? (acts.length > 15 ? 'Visa färre' : '') : 'Visa alla ' + acts.length;
 }
 
+function makeTextElement(tag, className = '', text = '') {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  element.textContent = text;
+  return element;
+}
+
 function confirmDelete(id, label) {
+  if (!AppSecurity.isUuid(id)) {
+    toast('Passet har ett ogiltigt ID och kan inte tas bort.');
+    return;
+  }
   confirmDeleteId = id;
   const existing = document.getElementById('delete-modal');
   if (existing) existing.remove();
   const modal = document.createElement('div');
   modal.id = 'delete-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'delete-modal-title');
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:200';
-  modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:360px;width:90%;border:0.5px solid var(--border)">
-      <div style="font-size:15px;font-weight:500;margin-bottom:8px">Ta bort pass?</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:1.5rem">${label}<br>Laps, splits och tidsseriedata raderas också.</div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn" onclick="document.getElementById('delete-modal').remove()">Avbryt</button>
-        <button class="btn" style="background:#fcebeb;color:#791f1f;border-color:#f7c1c1" onclick="doDelete()">Ta bort</button>
-      </div>
-    </div>`;
+  const card = makeTextElement('div');
+  card.style.cssText = 'background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:360px;width:90%;border:0.5px solid var(--border)';
+  const title = makeTextElement('div', '', 'Ta bort pass?');
+  title.id = 'delete-modal-title';
+  title.style.cssText = 'font-size:15px;font-weight:500;margin-bottom:8px';
+  const copy = makeTextElement('div', '', `${label}\nLaps, splits och tidsseriedata raderas också.`);
+  copy.style.cssText = 'font-size:13px;color:var(--text2);margin-bottom:1.5rem;white-space:pre-line';
+  const buttons = makeTextElement('div');
+  buttons.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
+  const cancelButton = makeTextElement('button', 'btn', 'Avbryt');
+  cancelButton.type = 'button';
+  cancelButton.addEventListener('click', closeDeleteModal);
+  const confirmButton = makeTextElement('button', 'btn', 'Ta bort');
+  confirmButton.type = 'button';
+  confirmButton.style.cssText = 'background:#fcebeb;color:#791f1f;border-color:#f7c1c1';
+  confirmButton.addEventListener('click', doDelete);
+  buttons.append(cancelButton, confirmButton);
+  card.append(title, copy, buttons);
+  modal.appendChild(card);
+  deleteModalState = {
+    activeElement: document.activeElement,
+    background: [...document.body.children].map(element => ({ element, inert: element.inert }))
+  };
+  deleteModalState.background.forEach(({ element }) => { element.inert = true; });
   document.body.appendChild(modal);
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  modal.addEventListener('click', e => { if (e.target === modal) closeDeleteModal(); });
+  modal.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeDeleteModal();
+    if (event.key === 'Tab') {
+      const focusables = [cancelButton, confirmButton];
+      const next = event.shiftKey
+        ? (document.activeElement === focusables[0] ? focusables[1] : focusables[0])
+        : (document.activeElement === focusables[1] ? focusables[0] : focusables[1]);
+      event.preventDefault();
+      next.focus();
+    }
+  });
+  cancelButton.focus();
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-modal')?.remove();
+  if (deleteModalState) {
+    deleteModalState.background.forEach(({ element, inert }) => { element.inert = inert; });
+    if (deleteModalState.activeElement?.isConnected) deleteModalState.activeElement.focus();
+    deleteModalState = null;
+  }
 }
 
 async function doDelete() {
   if (!confirmDeleteId) return;
-  document.getElementById('delete-modal').remove();
+  closeDeleteModal();
   try {
-    await dbQuery('activities?id=eq.' + confirmDeleteId, { method:'DELETE', headers:{'Prefer':'return=minimal'} });
+    await dbQuery('activities?' + AppSecurity.postgrestUuidFilter('id', confirmDeleteId), { method:'DELETE', headers:{'Prefer':'return=minimal'} });
     allActivities = allActivities.filter(a => a.id !== confirmDeleteId);
     confirmDeleteId = null;
     render();

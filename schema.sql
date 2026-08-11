@@ -1,5 +1,6 @@
--- Träningsdashboard – Supabase schema
--- Kör detta i Supabase SQL Editor (kör utan RLS)
+-- Träningsdashboard – låst Supabase-bootstrap
+-- Skapar tabeller men lämnar dem otillgängliga tills
+-- supabase/migrations/001_owner_rls_auth.sql har körts.
 
 -- Aktiviteter (summering per pass)
 create table if not exists activities (
@@ -22,6 +23,7 @@ create table if not exists activities (
   avg_power integer,
   training_stress_score numeric,
   filename text,
+  source_hash text,
   notes text,
   raw_data jsonb
 );
@@ -87,3 +89,16 @@ create index if not exists idx_activities_type on activities(activity_type);
 create index if not exists idx_laps_activity on laps(activity_id);
 create index if not exists idx_splits_activity on km_splits(activity_id);
 create index if not exists idx_ts_activity on time_series(activity_id);
+
+-- Fail closed. Migration 001 lägger till ägarskap, policies och authenticated-grants.
+alter table public.activities enable row level security;
+alter table public.laps enable row level security;
+alter table public.km_splits enable row level security;
+alter table public.time_series enable row level security;
+alter table public.nutrition_logs enable row level security;
+
+revoke all on table public.activities from public, anon;
+revoke all on table public.laps from public, anon;
+revoke all on table public.km_splits from public, anon;
+revoke all on table public.time_series from public, anon;
+revoke all on table public.nutrition_logs from public, anon;

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://mpmtvydpiihfltldaxkt.supabase.co; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Inställningar – Träningsdashboard</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -35,14 +36,14 @@
     <div style="margin-bottom:1.5rem">
       <div style="display:grid;grid-template-columns:repeat(2,minmax(140px,1fr));gap:12px;max-width:360px">
         <div>
-          <label style="font-size:14px;font-weight:500;display:block;margin-bottom:6px">Vilopuls</label>
+          <label for="hr-rest" style="font-size:14px;font-weight:500;display:block;margin-bottom:6px">Vilopuls</label>
           <div style="display:flex;align-items:center;gap:12px">
             <input type="number" id="hr-rest" value="60" min="30" max="120" style="width:90px;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:16px">
             <span style="font-size:14px;color:var(--text2)">bpm</span>
           </div>
         </div>
         <div>
-          <label style="font-size:14px;font-weight:500;display:block;margin-bottom:6px">Maxpuls</label>
+          <label for="hr-max" style="font-size:14px;font-weight:500;display:block;margin-bottom:6px">Maxpuls</label>
           <div style="display:flex;align-items:center;gap:12px">
             <input type="number" id="hr-max" value="190" min="100" max="240" style="width:90px;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:16px">
             <span style="font-size:14px;color:var(--text2)">bpm</span>
@@ -80,55 +81,21 @@
     <div id="export-summary" style="font-size:12px;color:var(--text3);margin-top:8px"></div>
   </div>
 
-  <!-- SQL setup reminder -->
+  <!-- Safe setup reminder -->
   <div class="card">
     <div class="card-header"><span class="card-title">Databasuppsättning</span></div>
-    <p style="font-size:14px;color:var(--text2);margin-bottom:1rem">Om du inte kört SQL-migrationen för laps, km_splits och time_series-tabellerna, kör detta i Supabase SQL Editor:</p>
-    <pre style="font-size:12px;background:var(--surface2);padding:1rem;border-radius:var(--radius);overflow-x:auto;color:var(--text2);line-height:1.6"><code>create table if not exists laps (
-  id uuid default gen_random_uuid() primary key,
-  activity_id uuid references activities(id) on delete cascade,
-  lap_index integer,
-  start_time timestamptz,
-  distance_meters numeric,
-  duration_seconds numeric,
-  avg_hr integer,
-  max_hr integer,
-  avg_pace_sec_per_km numeric,
-  avg_cadence integer,
-  elevation_gain numeric,
-  calories integer,
-  lap_trigger text
-);
-
-create table if not exists km_splits (
-  id uuid default gen_random_uuid() primary key,
-  activity_id uuid references activities(id) on delete cascade,
-  km integer,
-  distance_meters numeric,
-  duration_seconds numeric,
-  pace_sec_per_km numeric,
-  avg_hr integer,
-  avg_cadence integer,
-  elevation_gain numeric,
-  partial boolean default false
-);
-
-create table if not exists time_series (
-  id uuid default gen_random_uuid() primary key,
-  activity_id uuid references activities(id) on delete cascade,
-  t numeric,
-  d numeric,
-  hr integer,
-  alt numeric,
-  speed numeric,
-  cadence integer
-);</code></pre>
-    <button class="btn" style="margin-top:1rem" onclick="copySQL()">Kopiera SQL</button>
+    <p style="font-size:14px;color:var(--text2);line-height:1.6">
+      Databasen ska alltid sättas upp med det fail-closed flöde som beskrivs i
+      <a href="README.md">README</a>. Kör aldrig fristående tabell-SQL utan RLS.
+      För full lokal MVP krävs schema samt migration 001, 002, 003 och 004 i ordning.
+    </p>
   </div>
 </div>
 
 <div id="toast" class="toast"></div>
 
+<script src="js/security.js"></script>
+<script src="js/data-utils.js"></script>
 <script src="js/db.js"></script>
 <script>
 function renderZonePreview() {
@@ -176,17 +143,21 @@ function saveSettings() {
   renderZonePreview();
 }
 
-function copySQL() {
-  const sql = document.querySelector('code').textContent;
-  navigator.clipboard.writeText(sql).then(() => toast('SQL kopierat!'));
-}
-
 function readJsonSetting(key) {
   try {
     return JSON.parse(localStorage.getItem(key) || '{}');
   } catch(e) {
     return {};
   }
+}
+
+function readPlanLogSettings() {
+  const logs = {};
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (key?.startsWith('training_plan_logs_v1:')) logs[key] = readJsonSetting(key);
+  }
+  return logs;
 }
 
 function exportFileName() {
@@ -212,19 +183,9 @@ function downloadJson(data, filename) {
 }
 
 async function fetchAllRows(table, query, label) {
-  const pageSize = 1000;
-  const rows = [];
-  let from = 0;
-  while (true) {
-    document.getElementById('export-status').textContent = `${label}: ${rows.length} rader`;
-    const page = await dbQuery(`${table}?${query}`, {
-      headers: { Range: `${from}-${from + pageSize - 1}` }
-    });
-    if (!Array.isArray(page) || !page.length) break;
-    rows.push(...page);
-    if (page.length < pageSize) break;
-    from += pageSize;
-  }
+  const rows = await dbQueryAll(`${table}?${query}`, {
+    onPage: count => { document.getElementById('export-status').textContent = `${label}: ${count} rader`; }
+  });
   document.getElementById('export-status').textContent = `${label}: ${rows.length} rader`;
   return rows;
 }
@@ -300,98 +261,31 @@ function zoneForHrValue(hr, zones) {
   return zones.find(z => bpm >= z.min && bpm < z.max) || zones[zones.length - 1] || null;
 }
 
-function zoneKey(zone) {
-  return zone ? `z${zone.num}` : null;
-}
-
 function zoneNumFromLabel(label) {
   const match = String(label || '').match(/Z(\d)/i);
   return match ? Number(match[1]) : null;
 }
 
-function createZoneBuckets(zones) {
-  return Object.fromEntries(zones.map(z => [
-    zoneKey(z),
-    {
-      name: z.name,
-      min_hrr_percent: Math.round(z.minPct * 100),
-      max_hrr_percent: Math.round(z.maxPct * 100),
-      min_bpm: Math.round(z.min),
-      max_bpm: Number.isFinite(z.max) ? Math.round(z.max) : null,
-      seconds: 0,
-      percent: 0
-    }
-  ]));
-}
-
-function addZoneSeconds(buckets, zones, hr, seconds) {
-  const sec = finiteNumber(seconds);
-  if (!sec || sec <= 0) return false;
-  const zone = zoneForHrValue(hr, zones);
-  const key = zoneKey(zone);
-  if (!key || !buckets[key]) return false;
-  buckets[key].seconds += sec;
-  return true;
-}
-
-function finalizeZoneBuckets(buckets) {
-  const total = Object.values(buckets).reduce((sum, z) => sum + z.seconds, 0);
-  Object.values(buckets).forEach(z => {
-    z.seconds = roundNumber(z.seconds, 1) || 0;
-    z.percent = total ? roundNumber((z.seconds / total) * 100, 1) : 0;
-  });
-  const dominant = Object.entries(buckets)
-    .sort((a, b) => b[1].seconds - a[1].seconds)[0];
-  return {
-    total_seconds: roundNumber(total, 1) || 0,
-    dominant_zone: dominant && dominant[1].seconds > 0 ? dominant[0].toUpperCase() : null,
-    zones: buckets
-  };
-}
-
 function buildHrZones(activity, laps, splits, timeSeries, zones) {
-  const buckets = createZoneBuckets(zones);
-  const missing = [];
-  let source = 'none';
-  let confidence = 'low';
-
-  const ts = timeSeries
-    .map(p => ({ t: finiteNumber(p.t), hr: finiteNumber(p.hr) }))
-    .filter(p => p.t !== null && p.hr !== null)
-    .sort((a, b) => a.t - b.t);
-
-  if (ts.length >= 2) {
-    let added = 0;
-    for (let i = 0; i < ts.length - 1; i++) {
-      const delta = ts[i + 1].t - ts[i].t;
-      if (addZoneSeconds(buckets, zones, ts[i].hr, delta)) added += delta;
-    }
-    if (added > 0) {
-      source = 'time_series';
-      confidence = 'high';
-    }
-  }
-
-  if (source === 'none') {
-    const lapSegments = laps.filter(l => finiteNumber(l.avg_hr) !== null && finiteNumber(l.duration_seconds));
-    const splitSegments = splits.filter(s => finiteNumber(s.avg_hr) !== null && finiteNumber(s.duration_seconds));
-    const segments = lapSegments.length ? lapSegments : splitSegments;
-    segments.forEach(s => addZoneSeconds(buckets, zones, s.avg_hr, s.duration_seconds));
-    if (segments.length) {
-      source = lapSegments.length ? 'laps' : 'km_splits';
-      confidence = 'medium';
-    }
-  }
-
-  if (source === 'none' && activity.avg_hr && activity.duration_seconds) {
-    addZoneSeconds(buckets, zones, activity.avg_hr, activity.duration_seconds);
-    source = 'activity_average';
-    confidence = 'low';
-  }
-
-  if (source === 'none') missing.push('heart_rate');
-  const finalized = finalizeZoneBuckets(buckets);
-  return { source, confidence, ...finalized, missing_data: missing };
+  const result = AppData.buildHrZones(activity, laps, splits, timeSeries, zones);
+  const zoneEntries = result.buckets.map(zone => [`z${zone.num}`, {
+    name: zone.name,
+    min_hrr_percent: Math.round(zone.minPct * 100),
+    max_hrr_percent: Math.round(zone.maxPct * 100),
+    min_bpm: Math.round(zone.min),
+    max_bpm: Number.isFinite(zone.max) ? Math.round(zone.max) : null,
+    seconds: zone.seconds,
+    percent: zone.percent
+  }]);
+  const dominant = [...result.buckets].sort((a, b) => b.seconds - a.seconds)[0];
+  return {
+    source: result.source,
+    confidence: result.confidence,
+    total_seconds: result.totalSeconds,
+    dominant_zone: dominant?.seconds ? `Z${dominant.num}` : null,
+    zones: Object.fromEntries(zoneEntries),
+    missing_data: result.source === 'none' ? ['heart_rate'] : []
+  };
 }
 
 function sanitizeForCoachExport(value) {
@@ -818,7 +712,8 @@ function buildCoachExportData(tables) {
         min_bpm:Math.round(z.min),
         max_bpm:Number.isFinite(z.max) ? Math.round(z.max) : null
       })),
-      class_overrides: readJsonSetting('training_dashboard_class_overrides')
+      class_overrides: readJsonSetting('training_dashboard_class_overrides'),
+      plan_logs: readPlanLogSettings()
     },
     activities
   };
@@ -840,7 +735,7 @@ async function exportTrainingData() {
         format: 'training-dashboard-export-v1',
         source: 'supabase',
         table_counts: Object.fromEntries(Object.entries(tables).map(([key, rows]) => [key, rows.length])),
-        includes: ['activities', 'laps', 'km_splits', 'time_series', 'local_settings']
+        includes: ['activities', 'laps', 'km_splits', 'time_series', 'local_settings', 'plan_logs']
       },
       local_settings: {
         hr_method: method,
@@ -855,7 +750,8 @@ async function exportTrainingData() {
           min:z.min,
           max:Number.isFinite(z.max) ? z.max : null
         })),
-        class_overrides: readJsonSetting('training_dashboard_class_overrides')
+        class_overrides: readJsonSetting('training_dashboard_class_overrides'),
+        plan_logs: readPlanLogSettings()
       },
       tables
     };
@@ -900,13 +796,13 @@ async function exportCoachData() {
 async function loadCounts() {
   try {
     const [a, l, s] = await Promise.all([
-      dbQuery('activities?select=id&limit=1', { headers:{'Prefer':'count=exact','Range':'0-0'} }),
-      dbQuery('laps?select=id&limit=1', { headers:{'Prefer':'count=exact','Range':'0-0'} }).catch(()=>null),
-      dbQuery('km_splits?select=id&limit=1', { headers:{'Prefer':'count=exact','Range':'0-0'} }).catch(()=>null)
+      dbCount('activities'),
+      dbCount('laps').catch(()=>null),
+      dbCount('km_splits').catch(()=>null)
     ]);
-    document.getElementById('count-activities').textContent = Array.isArray(a) ? a.length + ' laddade' : '–';
-    document.getElementById('count-laps').textContent = l ? 'Tabell finns' : 'Tabell saknas – kör SQL ovan';
-    document.getElementById('count-splits').textContent = s ? 'Tabell finns' : 'Tabell saknas – kör SQL ovan';
+    document.getElementById('count-activities').textContent = `${a} pass`;
+    document.getElementById('count-laps').textContent = l === null ? 'Tabell saknas' : `${l} laps`;
+    document.getElementById('count-splits').textContent = s === null ? 'Tabell saknas' : `${s} km-splits`;
   } catch(e) {}
 }
 
