@@ -10,29 +10,40 @@ const DB_BASE_HEADERS = {
 let authSession = loadAuthSession();
 let appStartCallback = null;
 let appStarted = false;
+let authGateState = null;
 
 function loadAuthSession() {
   try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const current = sessionStorage.getItem(AUTH_STORAGE_KEY);
+    const legacy = current ? null : localStorage.getItem(AUTH_STORAGE_KEY);
+    const raw = current || legacy;
+    if (!raw) return null;
+    const normalized = AppSecurity.normalizeAuthSession(JSON.parse(raw));
+    if (!normalized) throw new Error('Invalid stored auth session.');
+    if (legacy) {
+      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(normalized));
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+    return normalized;
   } catch(e) {
+    sessionStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(AUTH_STORAGE_KEY);
     return null;
   }
 }
 
 function saveAuthSession(data) {
-  const providedExpiry = data.expires_at ? Number(data.expires_at) : null;
-  const expiresAt = providedExpiry
-    ? (providedExpiry < 1000000000000 ? providedExpiry * 1000 : providedExpiry)
-    : (Date.now() + ((data.expires_in || 3600) * 1000));
-  authSession = { ...data, expires_at: expiresAt };
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authSession));
+  const normalized = AppSecurity.normalizeAuthSession(data);
+  if (!normalized) throw new Error('Supabase returnerade en ogiltig session.');
+  authSession = normalized;
+  sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authSession));
+  localStorage.removeItem(AUTH_STORAGE_KEY);
   return authSession;
 }
 
 function clearAuthSession() {
   authSession = null;
+  sessionStorage.removeItem(AUTH_STORAGE_KEY);
   localStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
@@ -114,16 +125,6 @@ async function signOut() {
   location.reload();
 }
 
-function escapeHtml(value = '') {
-  return String(value).replace(/[&<>"']/g, ch => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  }[ch]));
-}
-
 function showAuthGate(message = '') {
   const existing = document.getElementById('auth-gate');
   if (existing) {
@@ -134,9 +135,12 @@ function showAuthGate(message = '') {
   const gate = document.createElement('div');
   gate.id = 'auth-gate';
   gate.className = 'auth-gate';
+  gate.setAttribute('role', 'dialog');
+  gate.setAttribute('aria-modal', 'true');
+  gate.setAttribute('aria-labelledby', 'auth-title');
   gate.innerHTML = `
     <form class="auth-card" id="auth-form">
-      <div class="auth-title">Logga in</div>
+      <div class="auth-title" id="auth-title">Logga in</div>
       <div class="auth-copy">Använd Supabase-kontot som äger dashboardens data.</div>
       <label class="auth-label" for="auth-email">E-post</label>
       <input id="auth-email" type="email" autocomplete="email" required>
@@ -145,6 +149,18 @@ function showAuthGate(message = '') {
       <button class="btn btn-primary auth-submit" type="submit">Logga in</button>
       <div class="auth-error" id="auth-error">${escapeHtml(message)}</div>
     </form>`;
+  authGateState = {
+    activeElement: document.activeElement,
+    background: [...document.body.children].map(element => ({
+      element,
+      inert: element.inert,
+      ariaHidden: element.getAttribute('aria-hidden')
+    }))
+  };
+  authGateState.background.forEach(({ element }) => {
+    element.inert = true;
+    element.setAttribute('aria-hidden', 'true');
+  });
   document.body.appendChild(gate);
 
   document.getElementById('auth-form').addEventListener('submit', async e => {
@@ -165,10 +181,20 @@ function showAuthGate(message = '') {
       btn.textContent = 'Logga in';
     }
   });
+  document.getElementById('auth-email').focus();
 }
 
 function hideAuthGate() {
   document.getElementById('auth-gate')?.remove();
+  if (authGateState) {
+    authGateState.background.forEach(({ element, inert, ariaHidden }) => {
+      element.inert = inert;
+      if (ariaHidden === null) element.removeAttribute('aria-hidden');
+      else element.setAttribute('aria-hidden', ariaHidden);
+    });
+    if (authGateState.activeElement?.isConnected) authGateState.activeElement.focus();
+    authGateState = null;
+  }
 }
 
 function injectAuthControls() {
@@ -201,7 +227,7 @@ async function startApp(onReady) {
   await runStartedApp();
 }
 
-async function dbQuery(path, opts = {}) {
+async function dbFetch(path, opts = {}) {
   await requireAuth();
   const res = await fetch(SUPA_URL + '/rest/v1/' + path, {
     ...opts,
@@ -212,9 +238,59 @@ async function dbQuery(path, opts = {}) {
       clearAuthSession();
       showAuthGate('Sessionen har gått ut. Logga in igen.');
     }
-    throw new Error(await res.text());
+    throw new Error(AppSecurity.safeErrorMessage(await res.text(), 'Databasförfrågan misslyckades.'));
   }
+  return res;
+}
+
+async function dbQuery(path, opts = {}) {
+  const res = await dbFetch(path, opts);
   return res.status === 204 ? null : res.json();
+}
+
+async function dbQueryWithMeta(path, opts = {}) {
+  const res = await dbFetch(path, opts);
+  const contentRange = res.headers.get('content-range') || '';
+  const totalMatch = contentRange.match(/\/(\d+|\*)$/);
+  return {
+    data: res.status === 204 ? null : await res.json(),
+    total: totalMatch && totalMatch[1] !== '*' ? Number(totalMatch[1]) : null
+  };
+}
+
+async function dbQueryAll(path, options = {}) {
+  const pageSize = Math.min(1000, Math.max(1, Number(options.pageSize) || 1000));
+  const maxRows = Math.max(pageSize, Number(options.maxRows) || 100000);
+  const rows = [];
+
+  for (let from = 0; from < maxRows; from += pageSize) {
+    const page = await dbQuery(path, {
+      headers: { ...(options.headers || {}), Range: `${from}-${from + pageSize - 1}` }
+    });
+    if (!Array.isArray(page) || !page.length) break;
+    rows.push(...page);
+    if (typeof options.onPage === 'function') options.onPage(rows.length);
+    if (page.length < pageSize) break;
+  }
+  if (rows.length >= maxRows) throw new Error(`Datamängden överskrider säkerhetsgränsen ${maxRows} rader.`);
+  return rows;
+}
+
+async function dbCount(table) {
+  if (!/^[a-z][a-z0-9_]*$/.test(table)) throw new Error('Ogiltigt tabellnamn.');
+  const result = await dbQueryWithMeta(`${table}?select=id&limit=1`, {
+    headers: { Prefer: 'count=exact', Range: '0-0' }
+  });
+  return result.total === null ? (Array.isArray(result.data) ? result.data.length : 0) : result.total;
+}
+
+async function dbRpc(name, data) {
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) throw new Error('Ogiltigt RPC-namn.');
+  return dbQuery(`rpc/${name}`, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(data || {})
+  });
 }
 
 async function dbInsert(table, data, opts = {}) {

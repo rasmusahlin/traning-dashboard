@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://mpmtvydpiihfltldaxkt.supabase.co; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Pass – Träningsdashboard</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -24,7 +25,7 @@
 
 <div class="container">
   <div style="padding-top:1.5rem">
-    <a class="back-btn" onclick="history.back()">← Tillbaka</a>
+    <a class="back-btn" href="index.html">← Till översikten</a>
   </div>
 
   <div id="main-content">
@@ -35,25 +36,37 @@
 <div id="toast" class="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="js/security.js"></script>
+<script src="js/data-utils.js"></script>
 <script src="js/db.js"></script>
 <script>
 let charts = {};
 const actId = new URLSearchParams(location.search).get('id');
 
 async function init() {
-  if (!actId) { document.getElementById('main-content').innerHTML = '<div class="empty">Inget pass-ID angivet.</div>'; return; }
+  if (!actId) { renderEmpty('Inget pass-ID angivet.'); return; }
+  if (!AppSecurity.isUuid(actId)) { renderEmpty('Ogiltigt pass-ID.'); return; }
   try {
+    const idFilter = AppSecurity.postgrestUuidFilter('id', actId);
+    const activityFilter = AppSecurity.postgrestUuidFilter('activity_id', actId);
     const [acts, laps, splits] = await Promise.all([
-      dbQuery(`activities?id=eq.${actId}`),
-      dbQuery(`laps?activity_id=eq.${actId}&order=lap_index.asc`),
-      dbQuery(`km_splits?activity_id=eq.${actId}&order=km.asc`)
+      dbQuery(`activities?${idFilter}`),
+      dbQuery(`laps?${activityFilter}&order=lap_index.asc`),
+      dbQuery(`km_splits?${activityFilter}&order=km.asc`)
     ]);
     const act = acts?.[0];
-    if (!act) { document.getElementById('main-content').innerHTML = '<div class="empty">Passet hittades inte.</div>'; return; }
+    if (!act) { renderEmpty('Passet hittades inte.'); return; }
     render(act, laps || [], splits || []);
   } catch(e) {
-    document.getElementById('main-content').innerHTML = `<div class="empty">Fel: ${e.message}</div>`;
+    renderEmpty('Fel: ' + AppSecurity.safeErrorMessage(e));
   }
+}
+
+function renderEmpty(message) {
+  const empty = document.createElement('div');
+  empty.className = 'empty';
+  empty.textContent = message;
+  document.getElementById('main-content').replaceChildren(empty);
 }
 
 function render(act, laps, splits) {
@@ -64,10 +77,10 @@ function render(act, laps, splits) {
   document.getElementById('main-content').innerHTML = `
     <div class="page-header">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-        <div class="activity-dot ${typeDotClass(act.activity_type)}" style="width:40px;height:40px;font-size:12px">${typeDot(act.activity_type)}</div>
+        <div class="activity-dot ${typeDotClass(act.activity_type)}" style="width:40px;height:40px;font-size:12px">${escapeHtml(typeDot(act.activity_type))}</div>
         <div>
-          <h1 style="font-size:20px;font-weight:500">${typeLabel(act.activity_type)}</h1>
-          <p style="font-size:14px;color:var(--text2)">${fmtDate(act.activity_date)}</p>
+          <h1 style="font-size:20px;font-weight:500">${escapeHtml(typeLabel(act.activity_type))}</h1>
+          <p style="font-size:14px;color:var(--text2)">${escapeHtml(fmtDate(act.activity_date))}</p>
         </div>
       </div>
     </div>
@@ -148,17 +161,17 @@ function render(act, laps, splits) {
             ['Kalorier', act.calories ? act.calories+' kcal' : '–'],
             ['Källa', act.filename || 'Manuell inmatning'],
             ['Notat', act.notes || '–']
-          ].map(([k,v])=>`<tr><td style="padding:8px 0;color:var(--text2);width:40%;border-bottom:0.5px solid var(--border)">${k}</td><td style="padding:8px 0;border-bottom:0.5px solid var(--border)">${v}</td></tr>`).join('')}
+          ].map(([k,v])=>`<tr><td style="padding:8px 0;color:var(--text2);width:40%;border-bottom:0.5px solid var(--border)">${escapeHtml(k)}</td><td style="padding:8px 0;border-bottom:0.5px solid var(--border)">${escapeHtml(v)}</td></tr>`).join('')}
         </table>
       </div>
     </div>
   `;
 
   // Render zone bars if HR data exists
-  if (act.avg_hr) renderZoneBars(act);
+  if (act.avg_hr) renderZoneBars(act, laps, splits, []);
 
   // Load time series for charts
-  loadTimeSeries(act.id, splits);
+  loadTimeSeries(act.id, splits, act, laps);
 }
 
 function renderSplitsTable(splits) {
@@ -219,31 +232,39 @@ function renderLapsTable(laps, isRun) {
   </div>`;
 }
 
-function renderZoneBars(act) {
+function renderZoneBars(act, laps, splits, timeSeries) {
   const { zones, max } = getHRConfig();
-  // Approximate zone time from laps or splits if available
   const el = document.getElementById('zone-bars');
   if (!el) return;
-  // Show static zone reference with avg HR marker
-  const avgHR = act.avg_hr || 0;
-  const avgZone = avgHR ? hrZone(avgHR) : null;
-  el.innerHTML = zones.map(z => {
-    const inZone = avgZone && avgZone.num === z.num;
+  const result = AppData.buildHrZones(act, laps, splits, timeSeries, zones);
+  const sourceLabels = {
+    time_series: 'tidsserie',
+    laps: 'laps',
+    km_splits: 'km-splits',
+    activity_average: 'aktivitetens snittpuls',
+    none: 'saknas'
+  };
+  const confidenceLabels = { high:'hög', medium:'medel', low:'låg' };
+  el.innerHTML = result.buckets.map(z => {
     return `<div class="zone-row">
       <div class="zone-label"><span class="zone-badge z${z.num}">Z${z.num}</span></div>
       <div style="flex:1">
         <div style="font-size:12px;color:var(--text2);margin-bottom:3px">${z.name} · ${Math.round(z.min)}–${z.max===Infinity?max:Math.round(z.max)} bpm · ${z.label}</div>
-        <div class="zone-bar-wrap"><div class="zone-bar-inner" style="width:${inZone?'60':'15'}%;background:${z.color}"></div></div>
+        <div class="zone-bar-wrap"><div class="zone-bar-inner" style="width:${z.percent}%;background:${z.color}"></div></div>
       </div>
-      ${inZone ? `<span style="font-size:12px;color:var(--text2)">snitt ${avgHR} bpm</span>` : '<span></span>'}
+      <span style="font-size:12px;color:var(--text2);min-width:90px;text-align:right">${z.percent.toFixed(1)} % · ${fmtDuration(z.seconds)}</span>
     </div>`;
-  }).join('') + `<p style="font-size:12px;color:var(--text3);margin-top:1rem">Exakt zonstid kräver per-sekund-data från FIT-fil. Ovan visar var ditt snitt-HR hamnar.</p>`;
+  }).join('') + `<p style="font-size:12px;color:var(--text3);margin-top:1rem">Källa: ${sourceLabels[result.source]} · tillförlitlighet: ${confidenceLabels[result.confidence]}${result.coveragePercent !== null ? ` · täckning ${result.coveragePercent.toFixed(1)} %` : ''}.</p>`;
 }
 
-async function loadTimeSeries(actId, splits) {
+async function loadTimeSeries(actId, splits, act, laps) {
   try {
-    const ts = await dbQuery(`time_series?activity_id=eq.${actId}&order=t.asc`);
-    if (ts && ts.length) renderTimeSeriesCharts(ts, splits);
+    const filter = AppSecurity.postgrestUuidFilter('activity_id', actId);
+    const ts = await dbQuery(`time_series?${filter}&order=t.asc`);
+    if (ts && ts.length) {
+      renderZoneBars(act, laps, splits, ts);
+      renderTimeSeriesCharts(ts, splits);
+    }
   } catch(e) { console.log('No time series data', e); }
 }
 

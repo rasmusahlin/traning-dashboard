@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://mpmtvydpiihfltldaxkt.supabase.co; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Analys – Träningsdashboard</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -28,13 +29,58 @@
     <p id="conn-label"><span class="status-dot status-loading" id="conn-dot"></span><span id="conn-text">Ansluter...</span></p>
   </div>
 
+  <section class="card analysis-method" aria-labelledby="analysis-method-title">
+    <div class="card-header">
+      <span class="card-title" id="analysis-method-title">Så läser du analysen</span>
+    </div>
+    <div class="analysis-method-grid">
+      <div><strong>1. Observerat</strong><span>Råa pass, distans, puls och registrerad träningsmängd.</span></div>
+      <div><strong>2. Tolkning</strong><span>Utjämnade kurvor och trendlinjer. Variation och datatäckning ska alltid vägas in.</span></div>
+      <div><strong>3. Scenario</strong><span>Teoretisk riktning mot sub-40 om den valda periodens trend fortsätter. Inte ett löfte eller tävlingsresultat.</span></div>
+    </div>
+    <div class="analysis-controls" aria-label="Analysfilter">
+      <label for="analysis-period">Period
+        <select id="analysis-period">
+          <option value="">Hela historiken</option>
+          <option value="730">Senaste 24 månaderna</option>
+          <option value="365">Senaste 12 månaderna</option>
+        </select>
+      </label>
+      <label for="analysis-comparison">Effektivitetsjämförelse
+        <select id="analysis-comparison">
+          <option value="all">Alla löppass</option>
+          <option value="5to15km">Pass på 5–15 km</option>
+        </select>
+      </label>
+    </div>
+    <div class="analysis-quality" aria-live="polite">
+      <div><span>Löppass i perioden</span><strong id="quality-runs">–</strong></div>
+      <div><span>Jämförelseunderlag</span><strong id="quality-comparison">–</strong></div>
+      <div><span>Pulstäckning</span><strong id="quality-hr">–</strong></div>
+      <div><span>Höjddatatäckning</span><strong id="quality-elevation">–</strong></div>
+    </div>
+    <p id="quality-note" class="analysis-note">Väder, underlag, vind, sömn och sjukdom registreras inte och kan därför inte korrigeras bort.</p>
+  </section>
+
+  <section class="card" aria-labelledby="sub40-evidence-title">
+    <div class="card-header">
+      <span class="card-title" id="sub40-evidence-title">Sub-40-underlag – tre separata signaler</span>
+    </div>
+    <p class="chart-desc">Signalerna kompletterar varandra. Ingen av dem avgör ensam om du kan springa milen under 40 minuter.</p>
+    <div class="evidence-grid">
+      <div class="evidence-item"><span>Kontinuitet · 8 veckor</span><strong id="evidence-consistency">–</strong><small id="evidence-consistency-detail">Registrerade löpveckor och snittvolym.</small></div>
+      <div class="evidence-item"><span>Fart · senaste 90 dagarna</span><strong id="evidence-speed">–</strong><small id="evidence-speed-detail">Bästa genomsnittspace på ett pass om minst 5 km.</small></div>
+      <div class="evidence-item"><span>Aerob effektivitet</span><strong id="evidence-aerobic">–</strong><small id="evidence-aerobic-detail">Beskrivande trend för meter per hjärtslag.</small></div>
+    </div>
+  </section>
+
   <!-- ── 1. Heatmap ─────────────────────────────────────────── -->
   <div class="card" style="margin-bottom:1rem">
     <div class="card-header">
       <span class="card-title">Träningskonsekvens – senaste 26 veckor</span>
       <span id="heatmap-summary" style="font-size:12px;color:var(--text3)"></span>
     </div>
-    <p class="chart-desc">Varje ruta = en dag. Blå = löpning (mörkare = längre pass), lila = styrka, grön = vandring. Konsekvens över tid är den starkaste indikatorn på långsiktig förbättring.</p>
+    <p class="chart-desc">Varje ruta = en dag. Blå = löpning (mörkare = längre pass), lila = styrka, grön = vandring. Vyn beskriver registrerad träningsregelbundenhet, inte effekt eller återhämtning.</p>
     <div id="heatmap-wrap" style="overflow-x:auto;padding-bottom:4px">
       <div id="heatmap-months" style="display:flex;margin-left:28px;position:relative;height:18px;margin-bottom:2px"></div>
       <div style="display:flex;gap:6px">
@@ -57,15 +103,15 @@
       <span class="card-title">Akut:kronisk belastningskvot (ACWR)</span>
       <span id="acwr-current" style="font-size:12px;color:var(--text3)"></span>
     </div>
-    <p class="chart-desc">Veckans km delat med snittet av de senaste 4 veckorna. Det gröna bandet (0.8–1.3) är det optimala träningsfönstret — tillräcklig stimulans utan skaderisk. Över 1.3 stiger skaderisken markant.</p>
+    <p class="chart-desc">Veckans km delat med snittet av de senaste 4 veckorna. Kvoten är en enkel volymindikator och tar inte hänsyn till intensitet, återhämtning eller individuell skaderisk.</p>
     <div style="position:relative;height:180px">
       <canvas id="chart-acwr"></canvas>
     </div>
     <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--text3);flex-wrap:wrap">
-      <span>Under 0.8 — underträning</span>
-      <span style="color:#1d9e75">0.8–1.3 — optimalt fönster</span>
-      <span style="color:#ba7517">1.3–1.5 — försiktighet</span>
-      <span style="color:#e24b4a">Över 1.5 — hög skaderisk</span>
+      <span>Under 0.8 — lägre än fyraveckorssnittet</span>
+      <span style="color:#1d9e75">0.8–1.3 — nära senaste nivån</span>
+      <span style="color:#ba7517">1.3–1.5 — tydlig volymökning</span>
+      <span style="color:#e24b4a">Över 1.5 — stor volymökning</span>
     </div>
   </div>
 
@@ -77,7 +123,7 @@
         <span class="card-title">Månadsvolym – löpning</span>
         <span id="vol-summary" style="font-size:12px;color:var(--text3)"></span>
       </div>
-      <p class="chart-desc">Staplar = km/månad. Grön linje = 3-månaders snitt. Visar om träningsvolymen byggs upp rätt över tid.</p>
+      <p class="chart-desc">Staplar = km/månad. Grön linje = 3-månaders snitt. Visar registrerad volymutveckling utan att bedöma om nivån är rätt för dig.</p>
       <div style="position:relative;height:200px">
         <canvas id="chart-monthly"></canvas>
       </div>
@@ -103,14 +149,14 @@
         <span class="card-title">Meter per hjärtslag</span>
         <span id="mps-current" style="font-size:12px;color:var(--text3)"></span>
       </div>
-      <p class="chart-desc">Hur långt du rör dig per hjärtslag — <strong>distans ÷ totala hjärtslag</strong>. Stiger kurvan förbättras hjärtats slagvolym och din aeroba kapacitet. Den gröna linjen visar vad du behöver hålla vid 91 % av maxpuls för att klara sub-40.</p>
+      <p class="chart-desc">Hur långt du rör dig per uppskattat hjärtslag — <strong>distans ÷ (snittpuls × tid)</strong>. Måttet påverkas av terräng, väder, sensor och passupplägg och ska läsas som en beskrivande trend.</p>
       <div style="position:relative;height:200px">
         <canvas id="chart-ef"></canvas>
       </div>
       <div id="ef-empty" class="empty" style="height:200px;display:none;flex-direction:column;align-items:center;justify-content:center"><div class="empty-icon">◎</div>Behöver pulsdata</div>
       <div id="ef-projection" style="margin-top:12px;padding:10px 14px;border-radius:var(--radius-sm);background:var(--surface2);font-size:13px;line-height:1.5;display:none"></div>
       <div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--text3);flex-wrap:wrap">
-        <span>Referenslinjen beräknas som 250 m/min ÷ (maxpuls × 91 %). Ändra maxpuls under <a href="settings.html" style="color:var(--text2)">Inställningar</a>.</span>
+        <span>Den gröna linjen är en teoretisk sub-40-referens vid 91 % av angiven maxpuls, inte en tävlingsprognos. Ändra maxpuls under <a href="settings.html" style="color:var(--text2)">Inställningar</a>.</span>
       </div>
     </div>
 
@@ -118,7 +164,7 @@
       <div class="card-header">
         <span class="card-title">Z2-tempoutveckling</span>
       </div>
-      <p class="chart-desc" id="z2-desc">Pace på pass med snittpulsen i Z2. Sjunkande linje = du springer snabbare vid samma ansträngning = stärkt aerob bas.</p>
+      <p class="chart-desc" id="z2-desc">Pace på pass med snittpulsen i Z2. Jämför helst liknande underlag eftersom terräng, väder och sensor påverkar resultatet.</p>
       <div style="position:relative;height:200px">
         <canvas id="chart-z2"></canvas>
       </div>
@@ -145,9 +191,31 @@
 
 <style>
 .chart-desc { font-size: 12px; color: var(--text3); margin-bottom: 1rem; line-height: 1.5; }
+.analysis-method-grid, .evidence-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.analysis-method-grid > div, .evidence-item { padding:12px; border-radius:var(--radius-sm); background:var(--surface2); }
+.analysis-method-grid strong, .analysis-method-grid span, .evidence-item span, .evidence-item small { display:block; }
+.analysis-method-grid strong { font-size:13px; margin-bottom:4px; }
+.analysis-method-grid span, .evidence-item small { font-size:12px; color:var(--text2); line-height:1.45; }
+.analysis-controls { display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; padding-top:14px; border-top:0.5px solid var(--border); }
+.analysis-controls label { display:flex; flex-direction:column; gap:5px; min-width:210px; font-size:11px; color:var(--text3); }
+.analysis-controls select { min-height:38px; padding:7px 32px 7px 9px; border:0.5px solid var(--border2); border-radius:var(--radius-sm); background:var(--surface); color:var(--text); font:inherit; }
+.analysis-quality { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:12px; }
+.analysis-quality div { padding:9px 10px; border-left:2px solid var(--border2); }
+.analysis-quality span { display:block; font-size:10px; color:var(--text3); }
+.analysis-quality strong { display:block; margin-top:2px; font-size:13px; font-weight:500; }
+.analysis-note { margin-top:10px; font-size:11px; color:var(--text3); line-height:1.45; }
+.evidence-item span { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.04em; }
+.evidence-item strong { display:block; margin:5px 0 3px; font-size:19px; font-weight:500; }
+@media (max-width:700px) {
+  .analysis-method-grid, .evidence-grid { grid-template-columns:1fr; }
+  .analysis-quality { grid-template-columns:repeat(2,1fr); }
+  .analysis-controls label { width:100%; }
+}
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="js/security.js"></script>
+<script src="js/data-utils.js"></script>
 <script src="js/db.js"></script>
 <script>
 let charts = {};
@@ -155,20 +223,69 @@ let allActs = [];
 
 async function init() {
   try {
-    allActs = await dbQuery('activities?order=activity_date.asc&limit=2000');
-    setConnected(true);
-    const runs = allActs.filter(a => a.activity_type === 'running');
+    allActs = await dbQueryAll('activities?order=activity_date.asc,id.asc');
+    setConnected(true, `${allActs.length} pass i hela historiken`);
     renderHeatmap(allActs);
-    if (runs.length) renderCharts(runs);
+    document.getElementById('analysis-period').addEventListener('change', renderSelectedAnalysis);
+    document.getElementById('analysis-comparison').addEventListener('change', renderSelectedAnalysis);
+    renderSelectedAnalysis();
   } catch(e) {
     setConnected(false);
     console.error(e);
   }
 }
 
-function setConnected(ok) {
+function renderSelectedAnalysis() {
+  const runs = allActs.filter(activity => activity.activity_type === 'running');
+  const periodValue = document.getElementById('analysis-period').value;
+  const comparison = document.getElementById('analysis-comparison').value;
+  const scopeRuns = AppData.filterAnalysisRuns(runs, { periodDays:periodValue || null });
+  const comparisonRuns = AppData.filterAnalysisRuns(scopeRuns, { comparison });
+  renderAnalysisCoverage(scopeRuns, comparisonRuns, comparison);
+  renderRunEvidence(scopeRuns);
+  if (scopeRuns.length) renderCharts(scopeRuns, comparisonRuns);
+}
+
+function renderAnalysisCoverage(scopeRuns, comparisonRuns, comparison) {
+  const coverage = AppData.summarizeAnalysisCoverage(scopeRuns, comparisonRuns);
+  document.getElementById('quality-runs').textContent = coverage.runCount.toLocaleString('sv-SE');
+  document.getElementById('quality-comparison').textContent = `${coverage.comparisonCount.toLocaleString('sv-SE')} pass`;
+  document.getElementById('quality-hr').textContent = `${coverage.hrCount} pass · ${coverage.hrPercent}%`;
+  document.getElementById('quality-elevation').textContent = `${coverage.elevationPercent}%`;
+  const scope = coverage.startDate && coverage.endDate ? `${fmtAnalysisDate(coverage.startDate)}–${fmtAnalysisDate(coverage.endDate)}` : 'ingen vald data';
+  const comparisonText = comparison === '5to15km'
+    ? 'Effektivitetsgraferna använder 5–15 km, men terräng och väder är fortfarande okända.'
+    : 'Effektivitetsgraferna blandar olika distanser och passupplägg.';
+  document.getElementById('quality-note').textContent = `${scope}. ${comparisonText} Väder, underlag, vind, sömn och sjukdom registreras inte och kan därför inte korrigeras bort.`;
+}
+
+function renderRunEvidence(runs) {
+  const evidence = AppData.summarizeRunEvidence(runs);
+  document.getElementById('evidence-consistency').textContent = evidence.totalWeeks
+    ? `${evidence.activeWeeks}/${evidence.totalWeeks} aktiva veckor`
+    : 'Otillräcklig data';
+  document.getElementById('evidence-consistency-detail').textContent = evidence.averageWeeklyKm === null
+    ? 'Inga registrerade löppass i perioden.'
+    : `${evidence.averageWeeklyKm.toFixed(1)} km/vecka i snitt under de senaste åtta veckorna i underlaget.`;
+  document.getElementById('evidence-speed').textContent = evidence.recentBestPace === null
+    ? 'Inget jämförbart pass'
+    : `${fmtPace(evidence.recentBestPace)}/km`;
+  document.getElementById('evidence-speed-detail').textContent = evidence.recentBestDate
+    ? `Bästa registrerade snittpace på ≥5 km, ${fmtAnalysisDate(evidence.recentBestDate)}. Inte samma sak som milform.`
+    : 'Kräver ett registrerat pass om minst 5 km under underlagets senaste 90 dagar.';
+  document.getElementById('evidence-aerobic').textContent = 'Beräknar…';
+  document.getElementById('evidence-aerobic-detail').textContent = 'Beskrivande trend för meter per hjärtslag.';
+}
+
+function setConnected(ok, detail = '') {
   document.getElementById('conn-dot').className = 'status-dot ' + (ok ? 'status-ok' : 'status-err');
-  document.getElementById('conn-text').textContent = ok ? 'Ansluten till Supabase' : 'Anslutningsfel';
+  document.getElementById('conn-text').textContent = ok
+    ? `Ansluten till Supabase${detail ? ' · ' + detail : ''}`
+    : 'Kunde inte hämta analysdata – försök igen';
+}
+
+function fmtAnalysisDate(dateStr) {
+  return new Date(`${dateStr}T12:00:00Z`).toLocaleDateString('sv-SE', { day:'numeric', month:'short', year:'numeric' });
 }
 
 function movingAvg(arr, n) {
@@ -177,19 +294,6 @@ function movingAvg(arr, n) {
     if (!slice.length) return null;
     return +(slice.reduce((a, b) => a + b, 0) / slice.length).toFixed(3);
   });
-}
-
-function trendLine(vals) {
-  const n = vals.length;
-  if (n < 2) return vals.map(() => null);
-  const xs = vals.map((_, i) => i);
-  const meanX = xs.reduce((a, b) => a + b, 0) / n;
-  const meanY = vals.reduce((a, b) => a + b, 0) / n;
-  const denom = xs.reduce((s, x) => s + (x - meanX) ** 2, 0);
-  if (!denom) return vals.map(() => null);
-  const slope = xs.reduce((s, x, i) => s + (x - meanX) * (vals[i] - meanY), 0) / denom;
-  const intercept = meanY - slope * meanX;
-  return xs.map(x => +(slope * x + intercept).toFixed(3));
 }
 
 // ── Heatmap ────────────────────────────────────────────────────
@@ -275,9 +379,14 @@ function renderHeatmap(acts) {
 }
 
 // ── Charts ─────────────────────────────────────────────────────
-function renderCharts(runs) {
+function renderCharts(runs, comparisonRuns) {
   Object.values(charts).forEach(c => c.destroy());
   charts = {};
+  document.getElementById('chart-ef').style.display = 'block';
+  document.getElementById('ef-empty').style.display = 'none';
+  document.getElementById('ef-projection').style.display = 'none';
+  document.getElementById('chart-z2').style.display = 'block';
+  document.getElementById('z2-empty').style.display = 'none';
 
   // ── ACWR ──────────────────────────────────────────────────────
   const weekKm = {};
@@ -434,13 +543,14 @@ function renderCharts(runs) {
   });
 
   // ── EF with reference lines ────────────────────────────────────
-  const efRuns = runs.filter(a => a.avg_hr > 0 && (a.distance_meters||0) > 2000 && a.duration_seconds);
+  const efRuns = comparisonRuns.filter(a => a.avg_hr > 0 && (a.distance_meters||0) > 2000 && a.duration_seconds);
   if (efRuns.length >= 3) {
     const efData  = efRuns.map(a => { const sp = a.avg_speed_ms || (a.distance_meters/a.duration_seconds); return { date:a.activity_date, ef:+(sp*60/a.avg_hr).toFixed(3) }; });
     const efLabels = efData.map(d => d.date.slice(5));
     const efVals   = efData.map(d => d.ef);
     const efSmooth = movingAvg(efVals, 6);
-    const efTrend  = trendLine(efVals);
+    const trendPoints = efData.map(point => ({ date:point.date, value:point.ef }));
+    const efTrend  = AppData.dateTrendValues(trendPoints);
     const ne = efLabels.length;
 
     // Current value + trend for header
@@ -454,10 +564,10 @@ function renderCharts(runs) {
     document.getElementById('mps-current').innerHTML =
       `Nu: <strong style="color:${mpsColor}">${mpsNow} m/slag${mpsArrow}</strong>${mpsDiff && mpsDiff !== 0 ? ` (${mpsDiff > 0 ? '+' : ''}${mpsDiff} vs tidigare)` : ''}`;
 
-    // Sub-40 reference: 4:00/km = 250 m/min at 91% of max HR
+    // Theoretical comparison only: 4:00/km = 250 m/min at 91% of max HR
     const { max: hrMax } = getHRConfig();
     const sub40ref = +(250 / (hrMax * 0.91)).toFixed(3);
-    const sub40Label = `Sub-40 vid ${Math.round(hrMax * 0.91)} bpm (${sub40ref} m/slag)`;
+    const sub40Label = `Teoretisk sub-40-referens (${sub40ref} m/slag)`;
 
     charts.ef = new Chart(document.getElementById('chart-ef'), {
       type: 'line',
@@ -492,53 +602,51 @@ function renderCharts(runs) {
         }
       }
     });
-    // ── Projection ────────────────────────────────────────────────
+    // ── Descriptive trend quality ─────────────────────────────────
     const projEl = document.getElementById('ef-projection');
     projEl.style.display = 'block';
-
-    if (ne >= 6) {
-      // Recalculate slope/intercept cleanly
-      const meanX = (ne - 1) / 2;
-      const meanY = efVals.reduce((a,b) => a+b, 0) / ne;
-      const denom = efVals.reduce((s,_,i) => s + (i - meanX)**2, 0);
-      const slope = denom ? efVals.reduce((s,v,i) => s + (i - meanX)*(v - meanY), 0) / denom : 0;
-      const intercept = meanY - slope * meanX;
-
-      if (slope <= 0.0005) {
-        projEl.innerHTML = `<span style="color:var(--text3)">📉 Trenden är för svag eller sjunkande för att ge en prognos. Mer konsekvent lågintensiv träning brukar vända kurvan.</span>`;
-      } else {
-        const iTarget = (sub40ref - intercept) / slope;
-        const runsLeft = iTarget - (ne - 1);
-
-        if (runsLeft <= 0) {
-          projEl.innerHTML = `<span style="color:#1d9e75">✓ Du är redan på eller över sub-40-målnivån (${sub40ref} m/slag). Håll kursen!</span>`;
-        } else {
-          // Average days per run based on actual data span
-          const firstDate = new Date(efRuns[0].activity_date);
-          const lastDate  = new Date(efRuns[ne - 1].activity_date);
-          const spanDays  = Math.max(1, (lastDate - firstDate) / 86400000);
-          const avgDaysPerRun = spanDays / (ne - 1);
-          const daysLeft  = Math.round(runsLeft * avgDaysPerRun);
-          const weeksLeft = Math.round(daysLeft / 7);
-
-          if (daysLeft > 365 * 4) {
-            projEl.innerHTML = `<span style="color:var(--text3)">📈 Trenden pekar åt rätt håll men är än så länge för svag för en tillförlitlig tidsangivelse. Fortsätt bygga volym.</span>`;
-          } else {
-            const baseDate = new Date(Math.max(Date.now(), lastDate.getTime()));
-            const projDate = new Date(baseDate);
-            projDate.setDate(projDate.getDate() + daysLeft);
-            const projStr = projDate.toLocaleDateString('sv-SE', { day: 'numeric', month: 'long', year: 'numeric' });
-            projEl.innerHTML = `🎯 Med nuvarande trend når du sub-40-målnivån (<strong>${sub40ref} m/slag</strong>) runt <strong>${projStr}</strong> — om ca <strong>${weeksLeft} veckor</strong>.`;
-          }
-        }
-      }
+    projEl.replaceChildren();
+    const trend = AppData.summarizeDateTrend(trendPoints);
+    const trendLine = document.createElement('div');
+    const scenarioLine = document.createElement('div');
+    scenarioLine.style.cssText = 'margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);color:var(--text2)';
+    if (trend.count < 12 || trend.spanDays < 56) {
+      trendLine.textContent = `Trendunderlag: ${trend.count} pass över ${trend.spanDays} dagar. Minst 12 pass över 8 veckor behövs innan riktning och teoretiskt datum visas.`;
+      document.getElementById('evidence-aerobic').textContent = 'För lite underlag';
+      document.getElementById('evidence-aerobic-detail').textContent = `${trend.count} jämförbara pulspass över ${trend.spanDays} dagar.`;
+      projEl.appendChild(trendLine);
     } else {
-      projEl.innerHTML = `<span style="color:var(--text3)">Behöver fler pass med pulsdata för att beräkna en prognos.</span>`;
+      const direction = trend.slopePer30Days > 0.01 ? 'stigande' : trend.slopePer30Days < -0.01 ? 'sjunkande' : 'stabil';
+      const strength = trend.rSquared >= 0.5 ? 'relativt sammanhållen' : trend.rSquared >= 0.25 ? 'varierande' : 'svag';
+      const sign = trend.slopePer30Days > 0 ? '+' : '';
+      trendLine.textContent = `Beskrivande trend: ${direction}, ${sign}${trend.slopePer30Days.toFixed(3)} m/slag per 30 dagar · ${trend.count} pass · ${trend.spanDays} dagar · ${strength} (R² ${trend.rSquared.toFixed(2)}).`;
+      document.getElementById('evidence-aerobic').textContent = `${direction} · ${sign}${trend.slopePer30Days.toFixed(3)}`;
+      document.getElementById('evidence-aerobic-detail').textContent = `m/slag per 30 dagar · ${trend.count} pass · R² ${trend.rSquared.toFixed(2)}. Påverkas av passens jämförbarhet.`;
+
+      const estimate = AppData.estimateDateTarget(trendPoints, sub40ref);
+      const stability = AppData.estimateTargetStability(trendPoints, sub40ref);
+      const cohesion = trend.rSquared >= 0.5 ? 'relativt sammanhållen' : trend.rSquared >= 0.25 ? 'varierande' : 'svag';
+      if (estimate.status === 'projected' && estimate.daysAfterLast <= 1460 && estimate.targetDate >= new Date().toISOString().slice(0, 10)) {
+        const date = new Date(`${estimate.targetDate}T12:00:00Z`).toLocaleDateString('sv-SE', { day:'numeric', month:'long', year:'numeric' });
+        const range = stability.status === 'range'
+          ? ` Stabilitetsintervall ${fmtAnalysisDate(stability.earliestDate)}–${fmtAnalysisDate(stability.latestDate)} när ett pass i taget tas bort ur beräkningen.`
+          : ' Datumet är instabilt när enskilda pass tas bort, så inget intervall visas.';
+        scenarioLine.textContent = `Teoretiskt sub-40-scenario: omkring ${date} om den valda periodens linjära trend fortsätter oförändrad.${range} Trendens sammanhållning i valda data: ${cohesion}. Det är en extrapolation, inte en tävlingsprognos.`;
+      } else if (estimate.status === 'trend_at_target') {
+        scenarioLine.textContent = 'Teoretiskt sub-40-scenario: trendlinjen ligger redan på eller över referensnivån. Det betyder inte i sig att sub-40 är verifierat.';
+      } else if (estimate.status === 'projected' && estimate.targetDate < new Date().toISOString().slice(0, 10)) {
+        scenarioLine.textContent = 'Den historiska trendlinjens teoretiska datum har passerat. Lägg till nyare pass innan ett aktuellt scenario visas.';
+      } else {
+        scenarioLine.textContent = 'Teoretiskt sub-40-scenario: inget datum visas eftersom trenden inte är positiv eller extrapolationen ligger mer än fyra år bort.';
+      }
+      projEl.append(trendLine, scenarioLine);
     }
 
   } else {
     document.getElementById('chart-ef').style.display = 'none';
     document.getElementById('ef-empty').style.display = 'flex';
+    document.getElementById('evidence-aerobic').textContent = 'För lite underlag';
+    document.getElementById('evidence-aerobic-detail').textContent = `${efRuns.length} jämförbara pass med puls, distans och tid.`;
   }
 
   // ── Z2 pace ────────────────────────────────────────────────────
@@ -548,8 +656,8 @@ function renderCharts(runs) {
   document.getElementById('z2-desc').textContent =
     `Normaliserad pace på pass där snittpulsen låg i Z2 (${Math.round(z2.min)}–${Math.round(z2.max)} bpm), ` +
     `omräknad till Z2-mitten ${Math.round(z2TargetHr)} bpm. Lägre puls straffas därför inte; ` +
-    'sjunkande linje = bättre fart vid samma aeroba ansträngning.';
-  const z2Runs = runs.filter(a => a.avg_hr >= z2.min && a.avg_hr < z2.max && (a.distance_meters||0) > 2000 && a.duration_seconds);
+    'använd trenden som jämförelse mellan liknande pass, inte som ett direkt konditionsmått.';
+  const z2Runs = comparisonRuns.filter(a => a.avg_hr >= z2.min && a.avg_hr < z2.max && (a.distance_meters||0) > 2000 && a.duration_seconds);
   if (z2Runs.length >= 3) {
     const z2Data = z2Runs.map(a => {
       const rawPace = a.duration_seconds / (a.distance_meters / 1000);
@@ -563,7 +671,7 @@ function renderCharts(runs) {
     const z2Vals   = z2Data.map(d => d.normalizedPace);
     const z2Labels = z2Data.map(d => d.date.slice(5));
     const z2Smooth = movingAvg(z2Vals, 5);
-    const z2Trend  = trendLine(z2Vals);
+    const z2Trend  = AppData.dateTrendValues(z2Data.map(point => ({ date:point.date, value:point.normalizedPace })));
     charts.z2 = new Chart(document.getElementById('chart-z2'), {
       type:'line',
       data:{ labels:z2Labels, datasets:[
@@ -605,7 +713,7 @@ function renderCharts(runs) {
   }
 
   // ── Scatter ────────────────────────────────────────────────────
-  const scatterRuns = runs.filter(a => a.avg_hr > 0 && (a.distance_meters||0) > 2000 && a.duration_seconds);
+  const scatterRuns = comparisonRuns.filter(a => a.avg_hr > 0 && (a.distance_meters||0) > 2000 && a.duration_seconds);
   const years = [...new Set(scatterRuns.map(a => a.activity_date.slice(0,4)))].sort();
   const palette = ['#a0b4cc','#6698c7','#185FA5','#1d9e75','#ba7517','#d85a30','#e24b4a'];
   const yc = i => palette[Math.max(0, palette.length - years.length + i)];

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://mpmtvydpiihfltldaxkt.supabase.co; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Ladda upp – Träningsdashboard</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -40,7 +41,7 @@
   </div>
 
   <div class="card">
-    <div class="upload-zone" id="drop-zone" onclick="document.getElementById('fit-input').click()">
+    <div class="upload-zone" id="drop-zone" role="button" tabindex="0" aria-controls="fit-input" onclick="document.getElementById('fit-input').click()">
       <div class="upload-icon">↑</div>
       <div class="upload-title">Dra och släpp FIT-fil här</div>
       <div class="upload-sub">Eller klicka för att välja en eller flera .fit-filer</div>
@@ -56,23 +57,23 @@
   <div class="card">
     <div class="card-header"><span class="card-title">Manuell inmatning</span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Datum</label><input type="date" id="f-date" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Typ</label>
+      <div><label for="f-date" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Datum</label><input type="date" id="f-date" style="width:100%"></div>
+      <div><label for="f-type" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Typ</label>
         <select id="f-type" style="width:100%;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px">
           <option value="running">Löpning</option>
           <option value="strength">Styrketräning</option>
           <option value="hiking">Vandring</option>
         </select>
       </div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Distans (km)</label><input type="number" id="f-dist" step="0.01" placeholder="0.00" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Tid (mm:ss eller minuter)</label><input type="text" id="f-dur" placeholder="45:30" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Snitt-HR (bpm)</label><input type="number" id="f-hr" placeholder="150" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Max-HR (bpm)</label><input type="number" id="f-maxhr" placeholder="175" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Kadens (spm)</label><input type="number" id="f-cad" placeholder="170" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Höjdmeter (m)</label><input type="number" id="f-elev" placeholder="0" style="width:100%"></div>
+      <div><label for="f-dist" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Distans (km)</label><input type="number" id="f-dist" min="0" max="1000" step="0.01" placeholder="0.00" style="width:100%"></div>
+      <div><label for="f-dur" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Tid (mm:ss eller minuter)</label><input type="text" id="f-dur" inputmode="decimal" placeholder="45:30" style="width:100%"></div>
+      <div><label for="f-hr" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Snitt-HR (bpm)</label><input type="number" id="f-hr" min="30" max="240" placeholder="150" style="width:100%"></div>
+      <div><label for="f-maxhr" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Max-HR (bpm)</label><input type="number" id="f-maxhr" min="30" max="240" placeholder="175" style="width:100%"></div>
+      <div><label for="f-cad" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Kadens (spm)</label><input type="number" id="f-cad" min="1" max="300" placeholder="170" style="width:100%"></div>
+      <div><label for="f-elev" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Höjdmeter (m)</label><input type="number" id="f-elev" min="0" max="20000" placeholder="0" style="width:100%"></div>
     </div>
-    <div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Notat</label>
-      <textarea id="f-notes" placeholder="Hur kändes passet?" style="width:100%;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px;min-height:60px;resize:vertical"></textarea>
+    <div style="margin-bottom:12px"><label for="f-notes" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Notat</label>
+      <textarea id="f-notes" maxlength="2000" placeholder="Hur kändes passet?" style="width:100%;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px;min-height:60px;resize:vertical"></textarea>
     </div>
     <button class="btn btn-primary" onclick="saveManual()">Spara pass</button>
     <span id="manual-status" style="font-size:13px;color:var(--text2);margin-left:8px"></span>
@@ -81,12 +82,20 @@
 
 <div id="toast" class="toast"></div>
 
+<script src="js/security.js"></script>
+<script src="js/data-utils.js"></script>
 <script src="js/db.js"></script>
 <script src="js/fitparser-bundle.min.js"></script>
 <script>
 document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
 
 const dz = document.getElementById('drop-zone');
+dz.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    document.getElementById('fit-input').click();
+  }
+});
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
 dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
 dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); handleFiles(e.dataTransfer.files); });
@@ -97,25 +106,49 @@ function numi(v) { var x = parseFloat(v); return isFinite(x) ? Math.round(x) : n
 function avg(arr) { return arr.length ? Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length) : null; }
 
 // ── FIT parser ─────────────────────────────────────────────────────────────
+const MAX_FIT_FILE_BYTES = 50 * 1024 * 1024;
+const MAX_BATCH_FILES = 100;
+
 function parseFitFile(file) {
   return new Promise(function(resolve, reject) {
+    if (!file || !/\.fit$/i.test(file.name || '')) {
+      reject(new Error('Endast filer med ändelsen .fit kan importeras.'));
+      return;
+    }
+    if (!Number.isFinite(file.size) || file.size <= 0 || file.size > MAX_FIT_FILE_BYTES) {
+      reject(new Error('FIT-filen måste vara större än 0 byte och högst 50 MB.'));
+      return;
+    }
     if (typeof FitParser === 'undefined') {
       reject(new Error('FitParser saknas – kontrollera att js/fitparser-bundle.min.js finns i repot.'));
       return;
     }
     var reader = new FileReader();
     reader.onerror = function() { reject(new Error('Kunde inte läsa filen.')); };
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
       try {
+        var sourceHash = await sha256Hex(e.target.result);
         var parser = new FitParser({ force:true, speedUnit:'km/h', lengthUnit:'m', temperatureUnit:'celsius', elapsedRecordField:true, mode:'list' });
         parser.parse(e.target.result, function(error, data) {
           if (error) { reject(new Error('FIT-parsningsfel: ' + error)); return; }
-          try { resolve(processFitData(data, file.name)); } catch(pe) { reject(pe); }
+          try {
+            var parsed = processFitData(data, file.name);
+            parsed.summary.source_hash = sourceHash;
+            resolve(parsed);
+          } catch(pe) { reject(pe); }
         });
       } catch(err) { reject(err); }
     };
     reader.readAsArrayBuffer(file);
   });
+}
+
+async function sha256Hex(buffer) {
+  if (!globalThis.crypto?.subtle) throw new Error('Webbläsaren saknar stöd för säkert filfingeravtryck.');
+  var digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest), function(byte) {
+    return byte.toString(16).padStart(2, '0');
+  }).join('');
 }
 
 function detectActivityType(session, data) {
@@ -155,7 +188,7 @@ function processFitData(data, filename) {
     elevation_gain_meters: actType !== 'strength' ? num(session.total_ascent) : null,
     elevation_loss_meters: actType !== 'strength' ? num(session.total_descent) : null,
     calories:              numi(session.total_calories),
-    filename:              filename,
+    filename:              String(filename || '').slice(0, 255),
     notes:                 null
   };
 
@@ -223,12 +256,30 @@ function buildTimeSeries(records) {
 
 // ── Batch upload state ─────────────────────────────────────────────────────
 var batchQueue = [];
-var batchResults = { ok:0, skip:0, errors:[] };
+var batchResults = { ok:0, duplicate:0, failed:0, errors:[] };
+
+function renderBatchProgress(container, label, percent, color) {
+  var title = document.createElement('div');
+  title.style.marginBottom = '8px';
+  title.textContent = label;
+  var track = document.createElement('div');
+  track.style.cssText = 'background:var(--surface2);border-radius:4px;height:6px;width:100%';
+  var fill = document.createElement('div');
+  fill.style.cssText = 'height:6px;border-radius:4px;transition:width 0.2s';
+  fill.style.background = color;
+  fill.style.width = Math.max(0, Math.min(100, Number(percent) || 0)) + '%';
+  track.appendChild(fill);
+  container.replaceChildren(title, track);
+}
 
 async function handleFiles(files) {
   if (!files || !files.length) return;
+  if (files.length > MAX_BATCH_FILES) {
+    toast('Välj högst ' + MAX_BATCH_FILES + ' FIT-filer åt gången.');
+    return;
+  }
   batchQueue = Array.from(files);
-  batchResults = { ok:0, skip:0, errors:[] };
+  batchResults = { ok:0, duplicate:0, failed:0, errors:[] };
 
   var state   = document.getElementById('upload-state');
   var actions = document.getElementById('upload-actions');
@@ -296,9 +347,14 @@ async function saveSingle() {
   var btn = document.querySelector('#upload-actions .btn-primary');
   btn.textContent = 'Sparar...'; btn.disabled = true;
   try {
-    await saveOneParsed(pd);
-    toast('Pass sparat!');
-    setTimeout(function() { location.href = 'index.html'; }, 1000);
+    var result = await saveOneParsed(pd);
+    if (result.status === 'duplicate') {
+      toast('Passet finns redan och importerades inte igen.');
+      setTimeout(function() { location.href = 'activity.html?id=' + encodeURIComponent(result.activity_id); }, 1000);
+    } else {
+      toast('Pass sparat!');
+      setTimeout(function() { location.href = 'index.html'; }, 1000);
+    }
   } catch(e) {
     toast('Fel: ' + e.message); btn.textContent = 'Spara till dashboard'; btn.disabled = false;
   }
@@ -312,35 +368,41 @@ async function runBatchImport() {
   for (var i = 0; i < batchQueue.length; i++) {
     var file = batchQueue[i];
     var pct  = Math.round(((i) / total) * 100);
-    msg.innerHTML =
-      '<div style="margin-bottom:8px">Importerar ' + (i+1) + ' / ' + total + ' &nbsp;·&nbsp; ' + file.name + '</div>' +
-      '<div style="background:var(--surface2);border-radius:4px;height:6px;width:100%">' +
-        '<div style="background:#185FA5;height:6px;border-radius:4px;width:' + pct + '%;transition:width 0.2s"></div>' +
-      '</div>';
+    renderBatchProgress(msg, 'Importerar ' + (i+1) + ' / ' + total + ' · ' + file.name, pct, '#185FA5');
     try {
       var pd = await parseFitFile(file);
-      await saveOneParsed(pd);
-      batchResults.ok++;
+      var result = await saveOneParsed(pd);
+      if (result.status === 'duplicate') batchResults.duplicate++;
+      else batchResults.ok++;
     } catch(e) {
-      batchResults.errors.push(file.name + ': ' + e.message);
-      batchResults.skip++;
+      batchResults.errors.push({
+        filename: file.name,
+        message: AppSecurity.safeErrorMessage(e, 'Filen kunde inte importeras.')
+      });
+      batchResults.failed++;
       console.error(file.name, e);
     }
   }
 
   // Done
-  msg.innerHTML =
-    '<div style="margin-bottom:8px">Import klar</div>' +
-    '<div style="background:var(--surface2);border-radius:4px;height:6px;width:100%">' +
-      '<div style="background:#1d9e75;height:6px;border-radius:4px;width:100%"></div>' +
-    '</div>';
+  renderBatchProgress(msg, 'Import klar', 100, '#1d9e75');
   preview.innerHTML =
-    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:1rem">' +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:1rem">' +
       '<div class="metric"><div class="metric-label">Importerade</div><div class="metric-value" style="color:#1d9e75">' + batchResults.ok + '</div></div>' +
-      '<div class="metric"><div class="metric-label">Hoppade över</div><div class="metric-value">' + batchResults.skip + '</div></div>' +
+      '<div class="metric"><div class="metric-label">Redan importerade</div><div class="metric-value">' + batchResults.duplicate + '</div></div>' +
+      '<div class="metric"><div class="metric-label">Misslyckade</div><div class="metric-value">' + batchResults.failed + '</div></div>' +
       '<div class="metric"><div class="metric-label">Totalt</div><div class="metric-value">' + total + '</div></div>' +
-    '</div>' +
-    (batchResults.errors.length ? '<div style="margin-top:1rem;font-size:12px;color:var(--text3)">' + batchResults.errors.slice(0,5).join('<br>') + '</div>' : '');
+    '</div>';
+  if (batchResults.errors.length) {
+    var errorList = document.createElement('div');
+    errorList.style.cssText = 'margin-top:1rem;font-size:12px;color:var(--text3)';
+    batchResults.errors.slice(0, 5).forEach(function(error) {
+      var row = document.createElement('div');
+      row.textContent = error.filename + ': ' + error.message;
+      errorList.appendChild(row);
+    });
+    preview.appendChild(errorList);
+  }
 
   var actions = document.getElementById('upload-actions');
   actions.style.display = 'flex';
@@ -348,47 +410,46 @@ async function runBatchImport() {
 }
 
 async function saveOneParsed(pd) {
-  var saved = await dbInsert('activities', pd.summary);
-  var actId = Array.isArray(saved) ? saved[0].id : saved.id;
-  if (pd.laps.length)
-    await dbInsert('laps', pd.laps.map(function(l){return Object.assign({},l,{activity_id:actId});}));
-  if (pd.kmSplits.length)
-    await dbInsert('km_splits', pd.kmSplits.map(function(s){return Object.assign({},s,{activity_id:actId});}));
-  if (pd.timeSeries.length) {
-    var step = Math.max(1, Math.floor(pd.timeSeries.length / 500));
-    var sampled = pd.timeSeries.filter(function(_,i){return i%step===0;});
-    await dbInsert('time_series', sampled.map(function(p){return Object.assign({},p,{activity_id:actId});}));
+  var response = await dbRpc('import_activity_bundle', {
+    p_activity: pd.summary,
+    p_laps: pd.laps || [],
+    p_km_splits: pd.kmSplits || [],
+    p_time_series: pd.timeSeries || []
+  });
+  var result = Array.isArray(response) ? response[0] : response;
+  if (!result || !['inserted', 'duplicate'].includes(result.status)) {
+    throw new Error('Databasen returnerade ett ogiltigt importsvar. Kontrollera migration 003.');
   }
-  return actId;
-}
-
-function parseManualDuration(s) {
-  if (!s) return null;
-  var parts = s.split(':');
-  if (parts.length === 3) return +parts[0]*3600 + +parts[1]*60 + +parts[2];
-  if (parts.length === 2) return +parts[0]*60 + +parts[1];
-  return +s * 60;
+  result.activity_id = AppSecurity.requireUuid(result.activity_id, 'pass-ID');
+  return result;
 }
 
 async function saveManual() {
-  var d = {
-    activity_date:         document.getElementById('f-date').value,
-    activity_type:         document.getElementById('f-type').value,
-    distance_meters:       +document.getElementById('f-dist').value * 1000 || null,
-    duration_seconds:      parseManualDuration(document.getElementById('f-dur').value),
-    avg_hr:                +document.getElementById('f-hr').value    || null,
-    max_hr:                +document.getElementById('f-maxhr').value  || null,
-    avg_cadence:           +document.getElementById('f-cad').value   || null,
-    elevation_gain_meters: +document.getElementById('f-elev').value  || null,
-    notes:                 document.getElementById('f-notes').value   || null
-  };
-  if (!d.activity_date) { toast('Ange datum'); return; }
+  var status = document.getElementById('manual-status');
   try {
+    var d = AppData.normalizeManualActivity({
+      activityDate: document.getElementById('f-date').value,
+      activityType: document.getElementById('f-type').value,
+      distanceKm: document.getElementById('f-dist').value,
+      duration: document.getElementById('f-dur').value,
+      avgHr: document.getElementById('f-hr').value,
+      maxHr: document.getElementById('f-maxhr').value,
+      avgCadence: document.getElementById('f-cad').value,
+      elevationGain: document.getElementById('f-elev').value,
+      notes: document.getElementById('f-notes').value
+    });
+    status.textContent = 'Sparar...';
     var saved = await dbInsert('activities', d);
-    var actId = Array.isArray(saved) ? saved[0].id : saved.id;
+    var actId = AppSecurity.requireUuid(Array.isArray(saved) ? saved[0].id : saved.id, 'pass-ID');
+    status.textContent = 'Sparat';
     toast('Pass sparat!');
-    setTimeout(function() { location.href = 'activity.html?id=' + actId; }, 1000);
-  } catch(e) { toast('Fel: ' + e.message); console.error(e); }
+    setTimeout(function() { location.href = 'activity.html?id=' + encodeURIComponent(actId); }, 1000);
+  } catch(e) {
+    var message = AppSecurity.safeErrorMessage(e, 'Passet kunde inte sparas.');
+    status.textContent = message;
+    toast('Fel: ' + message);
+    console.error(e);
+  }
 }
 
 startApp();

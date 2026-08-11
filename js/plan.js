@@ -52,8 +52,9 @@
     weightKg: DEFAULT_WEIGHT_KG,
     fourPassMode: false,
     hideOptional: false,
-    syncDisabled: false
+    syncStatus: 'local'
   };
+  let syncQueue = Promise.resolve();
 
   const statusLabels = {
     planned: 'Planerad',
@@ -96,6 +97,7 @@
       render();
       $('plan-loading').hidden = true;
       $('plan-app').hidden = false;
+      loadAndMergeRemoteLogs();
     } catch (error) {
       $('plan-loading').hidden = true;
       const errorBox = $('plan-error');
@@ -157,6 +159,7 @@
     $('import-logs-file').addEventListener('change', importLogs);
     $('export-summary-json').addEventListener('click', () => exportBlockSummary('json'));
     $('export-summary-csv').addEventListener('click', () => exportBlockSummary('csv'));
+    $('retry-sync').addEventListener('click', handleSyncAction);
   }
 
   function loadPreferences() {
@@ -282,10 +285,11 @@
     }
 
     const log = getLog(day);
+    const status = safeStatus(log);
     $('today-card').innerHTML = `
       <div class="card-header">
         <span class="card-title">${todayDay ? 'Dagens pass' : 'Planläge'}</span>
-        <span class="status-badge status-${log.status || 'planned'}">${statusLabels[log.status || 'planned']}</span>
+        <span class="status-badge status-${status}">${statusLabels[status]}</span>
       </div>
       <div class="today-title">${escapeHtml(day.title)}</div>
       <div class="today-meta">${escapeHtml(day.weekday)} ${formatDate(day.date)} · ${escapeHtml(day.durationRange || '')} · ${escapeHtml(day.distanceRangeKm || '0')} km</div>
@@ -298,6 +302,7 @@
     const days = visibleDays(daysForWeek(state.selectedWeek));
     $('week-plan').innerHTML = days.map(day => {
       const log = getLog(day);
+      const status = safeStatus(log);
       const isToday = day.date === todayLocalIso();
       const isSelected = day._planDayId === state.selectedDayId;
       const muted = state.fourPassMode && isOptionalRecovery(day);
@@ -311,7 +316,7 @@
             <div class="week-day-title">${escapeHtml(day.title)}</div>
             <div class="week-day-meta">${escapeHtml(day.distanceRangeKm || '0')} km · ${escapeHtml(day.intensity || '')}</div>
           </div>
-          <span class="status-badge status-${log.status || 'planned'}">${statusLabels[log.status || 'planned']}</span>
+          <span class="status-badge status-${status}">${statusLabels[status]}</span>
         </button>`;
     }).join('') || '<div class="empty">Inga dagar att visa i detta läge.</div>';
 
@@ -470,7 +475,13 @@
   function saveCurrentCheckIn() {
     const day = selectedDay();
     if (!day) return;
-    const values = currentCheckInValues();
+    let values;
+    try {
+      values = AppSecurity.normalizePlanLog(currentCheckInValues());
+    } catch (error) {
+      toast(AppSecurity.safeErrorMessage(error, 'Kontrollera check-in-värdena.'));
+      return;
+    }
     values.updatedAt = new Date().toISOString();
     state.logs[day._planDayId] = values;
     saveLogs();
@@ -498,41 +509,174 @@
     };
   }
 
-  async function syncCheckIn(day, checkIn) {
-    if (state.syncDisabled) return;
+  function syncCheckIn(day, checkIn) {
+    return enqueueSync(() => syncOneLogToCloud(day, checkIn));
+  }
+
+  async function syncOneLogToCloud(day, checkIn) {
+    setSyncStatus('syncing');
     try {
-      if (typeof getValidSession !== 'function' || typeof authHeaders !== 'function' || typeof SUPA_URL === 'undefined') return;
+      if (typeof getValidSession !== 'function' || typeof authHeaders !== 'function' || typeof SUPA_URL === 'undefined') {
+        setSyncStatus('local');
+        return;
+      }
       const session = await getValidSession();
       const userId = session?.user?.id;
-      if (!session?.access_token || !userId) return;
+      if (!session?.access_token || !userId) {
+        setSyncStatus('local');
+        return;
+      }
 
-      const payload = {
-        user_id: userId,
-        plan_block_id: state.blockInfo.id,
-        plan_day_id: day._planDayId,
-        plan_date: day.date,
-        status: checkIn.status || 'planned',
-        rpe: checkIn.rpe,
-        hip_pain: checkIn.hipPain,
-        sleep_quality: checkIn.sleepQuality,
-        stress: checkIn.stress,
-        energy: checkIn.energy,
-        actual_distance_km: checkIn.actualDistanceKm,
-        actual_duration_minutes: checkIn.actualDurationMinutes,
-        notes: checkIn.notes || null,
-        updated_at: new Date().toISOString()
-      };
-
-      const res = await fetch(`${SUPA_URL}/rest/v1/training_plan_logs?on_conflict=user_id,plan_block_id,plan_day_id`, {
-        method: 'POST',
-        headers: authHeaders({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) throw new Error(await res.text());
+      await postPlanLog(planLogPayload(day, checkIn));
+      setSyncStatus('synced');
     } catch (error) {
-      state.syncDisabled = true;
-      console.debug('Training plan Supabase sync disabled:', error);
+      setSyncStatus('error');
+      console.debug('Training plan Supabase sync failed:', error);
     }
+  }
+
+  async function loadAndMergeRemoteLogs() {
+    try {
+      if (typeof getValidSession !== 'function' || typeof authHeaders !== 'function' || typeof SUPA_URL === 'undefined') {
+        setSyncStatus('local');
+        return;
+      }
+      const session = await getValidSession();
+      if (!session?.access_token || !session.user?.id) {
+        setSyncStatus('local');
+        return;
+      }
+
+      setSyncStatus('syncing');
+      const blockFilter = encodeURIComponent(state.blockInfo.id);
+      const res = await fetch(`${SUPA_URL}/rest/v1/training_plan_logs?select=plan_day_id,status,rpe,hip_pain,sleep_quality,stress,energy,actual_distance_km,actual_duration_minutes,notes,updated_at&plan_block_id=eq.${blockFilter}&order=updated_at.asc`, {
+        headers: authHeaders()
+      });
+      if (!res.ok) throw new Error(AppSecurity.safeErrorMessage(await res.text(), 'Kunde inte hämta planloggar.'));
+
+      const remoteLogs = {};
+      (await res.json()).forEach(row => {
+        try {
+          if (!allowedDayIds().includes(row.plan_day_id)) return;
+          remoteLogs[row.plan_day_id] = AppSecurity.normalizePlanLog(remoteRowToLog(row));
+        } catch (error) {
+          console.warn('Ogiltig fjärrlogg hoppades över:', row.plan_day_id);
+        }
+      });
+      state.logs = AppData.mergePlanLogs(state.logs, remoteLogs, allowedDayIds());
+      saveLogs();
+      render();
+      await syncAllLogsToCloud(false);
+    } catch (error) {
+      setSyncStatus('error');
+      console.debug('Training plan remote load failed:', error);
+    }
+  }
+
+  function syncAllLogsToCloud(showToast) {
+    return enqueueSync(() => syncAllLogsNow(showToast));
+  }
+
+  async function syncAllLogsNow(showToast) {
+    try {
+      const session = typeof getValidSession === 'function' ? await getValidSession() : null;
+      const userId = session?.user?.id;
+      if (!session?.access_token || !userId || typeof SUPA_URL === 'undefined') {
+        setSyncStatus('local');
+        if (showToast) toast('Logga in på en dashboardsida för att aktivera plansynk.');
+        return;
+      }
+      const payload = state.days
+        .filter(day => state.logs[day._planDayId])
+        .map(day => planLogPayload(day, state.logs[day._planDayId]));
+      if (!payload.length) {
+        setSyncStatus('synced');
+        return;
+      }
+      setSyncStatus('syncing');
+      for (const log of payload) await postPlanLog(log);
+      setSyncStatus('synced');
+      if (showToast) toast('Planloggar synkade.');
+    } catch (error) {
+      setSyncStatus('error');
+      if (showToast) toast('Kunde inte synka planloggar. Lokala värden är kvar.');
+      console.debug('Training plan retry failed:', error);
+    }
+  }
+
+  async function postPlanLog(payload) {
+    const res = await fetch(`${SUPA_URL}/rest/v1/rpc/upsert_training_plan_log`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ p_log: payload })
+    });
+    if (!res.ok) throw new Error(AppSecurity.safeErrorMessage(await res.text(), 'Plansynken misslyckades. Kontrollera migration 004.'));
+  }
+
+  function enqueueSync(work) {
+    syncQueue = syncQueue.then(work, work);
+    return syncQueue;
+  }
+
+  function handleSyncAction() {
+    if (state.syncStatus === 'local' && typeof startApp === 'function') {
+      startApp(() => loadAndMergeRemoteLogs());
+      return;
+    }
+    syncAllLogsToCloud(true);
+  }
+
+  function planLogPayload(day, checkIn) {
+    return {
+      plan_block_id: state.blockInfo.id,
+      plan_day_id: day._planDayId,
+      plan_date: day.date,
+      status: safeStatus(checkIn),
+      rpe: checkIn.rpe,
+      hip_pain: checkIn.hipPain,
+      sleep_quality: checkIn.sleepQuality,
+      stress: checkIn.stress,
+      energy: checkIn.energy,
+      actual_distance_km: checkIn.actualDistanceKm,
+      actual_duration_minutes: checkIn.actualDurationMinutes,
+      notes: checkIn.notes || null,
+      updated_at: checkIn.updatedAt || new Date().toISOString()
+    };
+  }
+
+  function remoteRowToLog(row) {
+    return {
+      status: row.status,
+      rpe: row.rpe,
+      hipPain: row.hip_pain,
+      sleepQuality: row.sleep_quality,
+      stress: row.stress,
+      energy: row.energy,
+      actualDistanceKm: row.actual_distance_km,
+      actualDurationMinutes: row.actual_duration_minutes,
+      notes: row.notes || '',
+      updatedAt: row.updated_at
+    };
+  }
+
+  function allowedDayIds() {
+    return state.days.map(day => day._planDayId);
+  }
+
+  function setSyncStatus(status) {
+    state.syncStatus = status;
+    const note = $('sync-note');
+    const retry = $('retry-sync');
+    if (!note || !retry) return;
+    const labels = {
+      local: 'Sparar lokalt. Logga in på dashboarden för molnsynk.',
+      syncing: 'Synkar planloggar...',
+      synced: 'Sparat lokalt och synkat.',
+      error: 'Sparat lokalt, men inte synkat.'
+    };
+    note.textContent = labels[status] || labels.local;
+    retry.hidden = !['local', 'error'].includes(status);
+    retry.textContent = status === 'local' ? 'Logga in för synk' : 'Försök synka igen';
   }
 
   function exportLogs() {
@@ -553,15 +697,14 @@
 
     try {
       const parsed = JSON.parse(await file.text());
-      const importedLogs = parsed.logs;
       if (!parsed.planBlockId || parsed.planBlockId !== state.blockInfo.id) {
         toast('Import blockerad: backupen hör inte till aktuellt planblock.');
         return;
       }
-      if (!isPlainObject(importedLogs)) {
-        toast('Import blockerad: backupen saknar giltiga loggar.');
-        return;
-      }
+      const importedLogs = AppSecurity.normalizePlanLogs(
+        parsed.logs,
+        state.days.map(day => day._planDayId)
+      );
 
       const mode = (prompt(IMPORT_MODE_PROMPT, 'merge') || '').trim().toLowerCase();
       if (!mode) {
@@ -575,10 +718,11 @@
 
       state.logs = mode === 'replace' ? { ...importedLogs } : { ...state.logs, ...importedLogs };
       saveLogs();
+      syncAllLogsToCloud(false);
       render();
       toast(mode === 'replace' ? 'Backup importerad och ersatte loggar' : 'Backup importerad och ihopslagen');
     } catch (error) {
-      toast('Kunde inte importera backup');
+      toast('Import blockerad: ' + AppSecurity.safeErrorMessage(error, 'Backupen är ogiltig.'));
       console.warn('Training plan import failed:', error);
     }
   }
@@ -751,11 +895,28 @@
     return state.logs[day._planDayId] || { status: 'planned' };
   }
 
+  function safeStatus(log) {
+    return statusLabels[log?.status] ? log.status : 'planned';
+  }
+
   function loadLogs() {
     try {
-      return JSON.parse(localStorage.getItem(logsKey()) || '{}');
+      const parsed = JSON.parse(localStorage.getItem(logsKey()) || '{}');
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Ogiltigt lokalt loggformat.');
+      const allowed = new Set(allowedDayIds());
+      const valid = {};
+      Object.entries(parsed).forEach(([dayId, raw]) => {
+        if (!allowed.has(dayId)) return;
+        try {
+          valid[dayId] = AppSecurity.normalizePlanLog(raw);
+        } catch (error) {
+          console.warn('Ogiltig lokal planlogg hoppades över:', dayId);
+        }
+      });
+      localStorage.setItem(logsKey(), JSON.stringify(valid));
+      return valid;
     } catch (error) {
-      localStorage.removeItem(logsKey());
+      console.warn('Lokala planloggar kunde inte läsas. Nyckeln behålls för manuell återställning.');
       return {};
     }
   }
@@ -769,8 +930,9 @@
   }
 
   function renderPills(day) {
+    const category = categoryLabels[day.category] ? day.category : 'rest';
     return [
-      `<span class="plan-pill pill-${escapeHtml(day.category)}">${escapeHtml(categoryLabels[day.category] || day.category)}</span>`,
+      `<span class="plan-pill pill-${category}">${escapeHtml(categoryLabels[category])}</span>`,
       day.optional ? '<span class="plan-pill">Optional</span>' : '<span class="plan-pill">Required</span>',
       `<span class="plan-pill">${escapeHtml(day.nutritionProfile || '')}</span>`
     ].join('');
@@ -902,13 +1064,4 @@
     return !!value && typeof value === 'object' && !Array.isArray(value);
   }
 
-  function escapeHtml(value = '') {
-    return String(value).replace(/[&<>"']/g, ch => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
-    }[ch]));
-  }
 })();
