@@ -89,3 +89,11 @@ Användaren har uttryckligen godkänt säkerhetskopia, uppdatering av ansluten S
 - Användaren godkände 2026-09-19 även stängd klientåtkomst till den separata tabellen `coach_notes`. Migration 008 är installerad: PUBLIC/anon/authenticated saknar tabell- och kolumnbehörigheter, service_role behåller serveråtkomst. Tabellen var och är tom; inga uppgifter ändrades. Negativa läs-/skrivprov i drift, anonymt REST-anrop, oberoende granskning, 14 PostgreSQL-tester och 67 vanliga tester passerade. Tidigare behörigheter är sparade privat för eventuell separat godkänd återställning.
 - Efter publicering: sju centrala HTML-/JavaScript-filer kontrollerades byte för byte mot releaseversionen. Inloggningsskyddet fungerar i den publicerade webbläsarvyn utan konsolfel. Ingen inloggad användarsession testades i den publika frontendvyn; dataflöden verifierades med syntetisk frontend och återställda transaktionstester i Supabase.
 - Nästa: användaren loggar in på dashboarden och sparar sina mål/tillgängliga dagar. Den enkla extrapoleringen är kvar. Inget installations- eller publiceringsarbete återstår. Den separata behörighetsåtgärden är också färdig; inga beslut väntar.
+
+### Senaste uppföljning – publicerad 2026-09-19
+
+- Användaren godkände uttryckligen publicering av den återställda Z2-grafen, instruktionerna i Min plan/Mål & inställningar och fixen för stora coach-/dataexporter.
+- PR [#17](https://github.com/rasmusahlin/traning-dashboard/pull/17) är sammanfogad. Nu publicerad kodrevision är `c1456439969cc4bb5dc46dadb661a2a6e465d428`; Pages-körning `35457565185` lyckades. Ingen databasändring krävdes för denna uppföljning.
+- 72 tester och oberoende granskningar passerade. Export med 105 000 syntetiska tidsseriepunkter verifierades även i nedladdad JSON; inga punkter saknades. Feltester stoppar ofullständig export. Z2-trenden har regressionstest över sommartidsbyte.
+- De sex ändrade produktfilerna verifierades byte för byte mot den publicerade versionen. Z2-graf och instruktioner kontrollerades i den inloggade produktionsvyn utan konsolfel; mobil/dator och exportflöde testades med syntetiska data lokalt.
+- Inget publiceringsarbete eller beslut återstår. Denna verifierade status sparas på releasegrenen efter publiceringen. Återställningspunkt för frontend är föregående publicerade revision `426d51b311af88cb240e45d4c90dbfa83ed152dd`.
