@@ -288,6 +288,30 @@
     };
   }
 
+  // Same proportional pace adjustment as the original Z2 chart, at one fixed HR.
+  function z2Pace(activities, zone, today = localDate(new Date())) {
+    const min = finite(zone && zone.min), max = finite(zone && zone.max);
+    if (!(min > 0 && max > min)) return { targetHr: null, observations: [] };
+    const targetHr = (min + max) / 2;
+    const observations = sortedActivities(activities).filter(isRunning).flatMap(a => {
+      const date = localDate(a.activity_date), pace = paceSeconds(a), hr = finite(a.avg_hr);
+      if (date > today || !dateObject(date) || !(activityDistanceKm(a) > 2) ||
+          !(hr >= min && hr < max) || !(pace.seconds > 0)) return [];
+      return [{ date, hr, rawPace: pace.seconds, source: pace.label,
+        normalizedPace: pace.seconds * hr / targetHr }];
+    });
+    const calendarDay = date => Date.parse(`${date}T00:00:00Z`) / DAY;
+    const first = observations[0] && calendarDay(observations[0].date);
+    const points = observations.map(o => ({ x: calendarDay(o.date) - first, y: o.normalizedPace }));
+    const regression = observations.length >= 3 ? linearRegression(points) : null;
+    observations.forEach((o, i) => {
+      const window = observations.slice(Math.max(0, i - 4), i + 1);
+      o.average = window.length === 5 ? window.reduce((sum, r) => sum + r.normalizedPace, 0) / 5 : null;
+      o.trend = regression ? regression.intercept + regression.slope * points[i].x : null;
+    });
+    return { targetHr, observations };
+  }
+
   function linearRegression(points) {
     if (points.length < 2) return null;
     const mx = points.reduce((s, p) => s + p.x, 0) / points.length;
@@ -375,6 +399,7 @@
     calendarWeeks,
     comparePeriods,
     comparableRuns,
+    z2Pace,
     projection
   };
 }));

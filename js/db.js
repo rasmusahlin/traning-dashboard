@@ -307,12 +307,14 @@ async function dbQueryAll(path, pageSizeOrOptions = 500) {
   if (!order.split(',').some(part => /^id(?:\.|$)/.test(part))) query.set('order', order ? `${order},id.asc` : 'id.asc');
   const rows = [];
   let previousSignature = null;
-  for (let page = 0; page < 10000 && rows.length < maxRows; page++) {
+  for (let page = 0; page < 10000 && rows.length <= maxRows; page++) {
     query.set('offset', String(rows.length));
-    query.set('limit', String(Math.min(pageSize, maxRows - rows.length)));
+    // Probe once at the exact boundary so a complete result at maxRows succeeds.
+    query.set('limit', String(Math.min(pageSize, maxRows - rows.length + 1)));
     const items = await dbQuery(`${table}?${query}`, { headers: options.headers || {} });
     if (!Array.isArray(items)) throw new Error('Datakällan returnerade inte en lista.');
     if (!items.length) return rows;
+    if (rows.length + items.length > maxRows) break;
     const signature = JSON.stringify(items);
     if (signature === previousSignature) throw new Error('Historiken kunde inte hämtas fullständigt. Försök igen.');
     previousSignature = signature;

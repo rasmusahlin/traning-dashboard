@@ -14,6 +14,7 @@ Personlig träningsöversikt med Garmin FIT/ZIP, en statisk webbplats och Supaba
 
 - **Översikt:** mål, senaste relevanta test/tävling, fyra avslutade veckor jämfört med föregående fyra, kalenderveckor inklusive luckor, jämförbara lugna pass och styrkekontinuitet.
 - **Utveckling:** råa trender och spårbart urval. Jämförbara pass grupperas med hänsyn till puls, varaktighet och angivet underlag/runda. Det är en beskrivande jämförelse; exempelvis väder och dagsform kan fortfarande påverka.
+- **Z2-tempoutveckling:** separat graf med samma proportionella pulsjustering som tidigare: tempo × snittpuls / mitten av Z2. Löppass över 2 km med snittpuls i aktuell Z2 ingår utan krav på märkning. Visar fempassnitt efter fem pass och datumvägd trend efter tre. Nuvarande pulsinställningar räknar om hela serien; timer-/hastighetstempo prioriteras före förfluten tid. Det är inte samma mått som jämförbara lugna pass.
 - **Enkel extrapolerad prognos finns kvar:** meter per hjärtslag, linjär trend och målreferens, med olika historiska urval. Tävlingspuls 91 % av angiven maxpuls är ett synligt modellantagande. Resultatet är ett scenario, inte en sannolikhet eller garanti. Prognosen undanhålls vid för få eller gamla observationer.
 - **Passmix:** automatisk klassning med manuell korrigering och återställning till Auto. Ingen belastningskvot framställs som en säker skaderiskgräns.
 - **Min plan:** försiktiga förslag utifrån aktuell träning, mål och tillgänglighet. Historiska planblock finns kvar i historikväljaren. Dagsform visas som okänd när underlag saknas.
@@ -27,6 +28,7 @@ Tid med aktiv timer används före hastighetsberäknad tid och sist förfluten t
 - Äldre lokala inställningar/loggar importeras med en uttrycklig knapp. De saknar ägaruppgift och kopplas därför inte automatiskt till ett konto.
 - FIT-original sparas privat i **den aktuella webbläsarens IndexedDB**, inte i Git eller molnet. Exportera dem via Importera; rensad webbläsardata kan annars ta bort kopian. Det är inte en automatisk molnbackup.
 - **Exportera träningsdata** omfattar aktiviteter, detaljer, planloggar och profil. Coach-exporten inkluderar mål, märkningar, planloggar och beräkningskällor. Ingen export skickas automatiskt till en extern AI-tjänst. JSON-exporten är ett arkivunderlag; generell återimport av hela databasen är inte implementerad. Planloggar kan återimporteras i Min plan.
+- Båda exporterna hämtar tidsserier komplett per aktivitet. Radskyddet på 100 000 gäller därmed ett enskilt pass, inte hela träningshistoriken; inga punkter kapas för att få exporten att lyckas. Vid hämtfel avbryts exporten utan att skapa en ofullständig fil.
 
 ## Databas och installation
 
@@ -60,6 +62,8 @@ node tests/preview-server.cjs 8903
 ```
 
 Öppna `http://127.0.0.1:8903/`. Förhandsvisningen är tydligt märkt med **syntetiska testdata**, ersätter databasadressen i det serverade testsvaret och kontaktar inte din Supabase-databas. Ändringar i testkontot försvinner när servern startas om. Servern är bara ett lokalt testverktyg och ska inte användas för publicering.
+
+För att kontrollera stor export i webbläsaren: `node tests/preview-server.cjs 8906 --large-export`. Det skapar 105 000 syntetiska tidsseriepunkter fördelade på 35 löppass.
 
 PostgreSQL-integrationen kan köras mot en separat installerad `@electric-sql/pglite`:
 

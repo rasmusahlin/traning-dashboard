@@ -29,6 +29,9 @@ for (let i=0; i<40; i++) {
   activity.hr_zone_seconds={'1':100,'2':timer-200,'3':100,'4':0,'5':0};activity.hr_coverage_seconds=timer;
   activity.hr_zone_config={method:'karvonen',rest:55,max:190,zones:[{num:1,name:'Z1 Återhämtning',min:55,max:136},{num:2,name:'Z2 Lugn',min:136,max:150},{num:3,name:'Z3 Tempo',min:150,max:163},{num:4,name:'Z4 Hårt',min:163,max:177},{num:5,name:'Z5 Max',min:177,max:null}]};
   tables.activities.push(activity);
+  if (!strength && process.argv.includes('--large-export')) for (let point=0; point<3000; point++) {
+    tables.time_series.push({id:id(3000000+i*3000+point),activity_id:activityId,t:point*timer/2999,hr:activity.avg_hr,speed:activity.avg_speed_ms});
+  }
   if(!strength)for(let k=1;k<=8;k++) {
     tables.laps.push({id:id(1000+i*10+k),activity_id:activityId,lap_index:k,distance_meters:1000,duration_seconds:timer/8,moving_duration_seconds:timer/8,avg_pace_sec_per_km:timer/8,avg_hr:143+i%3});
     tables.km_splits.push({id:id(2000+i*10+k),activity_id:activityId,km:k,distance_meters:1000,duration_seconds:timer/8,timer_duration_seconds:timer/8,pace_sec_per_km:timer/8,avg_hr:143+i%3});

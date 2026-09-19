@@ -29,6 +29,19 @@
   </div>
 
   <section class="card">
+    <details class="usage-guide">
+      <summary>Så använder du Mål &amp; inställningar</summary>
+      <ol>
+        <li>Ange måldistans, måltid och eventuellt datum. Välj hur många löppass, vilka dagar och hur många minuter per vecka som faktiskt ryms. Klicka på <strong>Spara mål och tillgänglighet</strong>.</li>
+        <li>Kontrollera vilopuls och maxpuls under Pulszoner och klicka på <strong>Spara inställningar</strong>. De styr zonerna och referenspulsen i Z2-grafen.</li>
+        <li>Bekräfta bara den period där alla pass är importerade med <strong>Spara täckning</strong>. Flytta fram slutdatumet när du har importerat nästa omgång. Planen blir försiktigare om de senaste sex veckorna inte är bekräftade.</li>
+        <li>Öppna <a href="plan/">Min plan</a> för ett uppdaterat veckoförslag. Ändra inställningarna när målet eller din tillgänglighet ändras; du behöver inte fylla i dem inför varje pass.</li>
+      </ol>
+      <p class="muted">Veckotiden är en övre ram, inte en beställning att öka till den nivån direkt. Förslaget väger även in din senaste löpning. Måltiden används i måljämförelsen och prognosen; den ger ännu inga exakta intervallfarter i veckoförslaget.</p>
+    </details>
+  </section>
+
+  <section class="card">
     <div class="card-header"><h2 class="card-title">Vad vill du uppnå?</h2></div>
     <p class="muted">Målet styr jämförelser och planförslag. Standardvärdena är ett förslag tills du har sparat dina egna.</p>
     <form id="goal-form" class="form-grid">
@@ -247,11 +260,24 @@ async function loadExportTables() {
     const session = typeof getValidSession === 'function' ? await getValidSession() : null;
     ownerId = session?.user?.id || null;
   } catch (_) {}
+  const activities = await fetchAllRows('activities', 'order=activity_date.asc,id.asc', 'Aktiviteter');
+  const timeSeries = [];
+  // The row guard applies to one activity, not a lifetime of sensor samples.
+  // Keep every sample: coach summaries and the raw backup use the same source.
+  for (const [index, activity] of activities.entries()) {
+    if (!AppSecurity.isUuid(activity.id)) throw new Error('Ett pass saknar giltigt id. Exporten avbröts.');
+    const label = `Tidsserie, pass ${index + 1} av ${activities.length}`;
+    const rows = await fetchAllRows('time_series', `activity_id=eq.${encodeURIComponent(activity.id)}&order=t.asc,id.asc`, label);
+    for (const row of rows) {
+      if (row.activity_id !== activity.id) throw new Error('Tidsserien hör till fel pass. Exporten avbröts.');
+      timeSeries.push(row);
+    }
+  }
   return {
-    activities: await fetchAllRows('activities', 'order=activity_date.asc,id.asc', 'Aktiviteter'),
+    activities,
     laps: await fetchAllRows('laps', 'order=activity_id.asc,lap_index.asc,id.asc', 'Laps'),
     km_splits: await fetchAllRows('km_splits', 'order=activity_id.asc,km.asc,id.asc', 'Km-splits'),
-    time_series: await fetchAllRows('time_series', 'order=activity_id.asc,t.asc,id.asc', 'Tidsserie'),
+    time_series: timeSeries,
     training_plan_logs: await fetchAllRows('training_plan_logs', 'order=plan_date.asc,id.asc', 'Planloggar'),
     training_profiles: await dbQuery('training_profiles?select=*'),
     local_pending_plan_logs: readPlanLogSettings(ownerId)
