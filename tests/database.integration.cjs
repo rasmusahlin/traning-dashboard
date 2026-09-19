@@ -22,7 +22,19 @@ test('database migrations: authentication, owner isolation, atomic writes and co
     `);
     await db.exec(fs.readFileSync(path.join(root, 'schema.sql'), 'utf8'));
     const migrations = fs.readdirSync(path.join(root, 'supabase/migrations')).filter(f => f.endsWith('.sql')).sort();
-    for (const migration of migrations) await db.exec(fs.readFileSync(path.join(root, 'supabase/migrations', migration), 'utf8'));
+    for (const migration of migrations) {
+      let sql = fs.readFileSync(path.join(root, 'supabase/migrations', migration), 'utf8');
+      // 001 deliberately ships with a placeholder so a real owner email is
+      // never committed.  The disposable PGlite fixture supplies its own
+      // synthetic owner while exercising the complete migration chain.
+      if (migration === '001_owner_rls_auth.sql') {
+        sql = sql.replace(
+          "REPLACE_WITH_OWNER_EMAIL@example.invalid",
+          'synthetic@example.invalid'
+        );
+      }
+      await db.exec(sql);
+    }
     await db.exec(`set role authenticated; set request.jwt.claim.sub='${owner}';`);
     const scalar = async (sql, params = []) => (await db.query(sql, params)).rows[0]?.result;
     const writeProfile = (patch, revision) => scalar('select public.save_training_profile($1::jsonb,$2::integer) as result', [JSON.stringify(patch), revision]);
@@ -74,15 +86,23 @@ test('database migrations: authentication, owner isolation, atomic writes and co
       assert.equal((await db.query('select * from activities')).rows.length, 1);
       assert.equal((await db.query('select * from laps')).rows.length, 1);
     });
+    await t.test('legacy bundle RPC remains usable after the expanded activity type check', async () => {
+      const bundlePayload = {...payload, activity_type:'cycling', source_hash:'e'.repeat(64), source_identity:'legacy-bundle'};
+      const result = await scalar('select public.import_activity_bundle($1::jsonb) as result', [JSON.stringify(bundlePayload)]);
+      assert.equal(result.status, 'inserted');
+      assert.equal((await db.query("select activity_type from activities where source_hash=$1", [bundlePayload.source_hash])).rows[0].activity_type, 'cycling');
+    });
     await t.test('invalid child data rolls the entire activity back', async () => {
       const invalid = {...payload, source_hash:'b'.repeat(64), source_identity:'synthetic-invalid', started_at:'2026-09-15T08:00:00Z', activity_date:'2026-09-15'};
+      const before = (await db.query('select count(*)::integer as count from activities')).rows[0].count;
       await assert.rejects(importActivity(invalid,[{lap_index:'bad',duration_seconds:20}]));
       await assert.rejects(importActivity(invalid,[{lap_index:1,duration_seconds:-20}]));
-      assert.equal((await db.query('select * from activities')).rows.length, 1);
+      assert.equal((await db.query('select count(*)::integer as count from activities')).rows[0].count, before);
     });
     await t.test('negative activity values cannot enter through the atomic import endpoint', async () => {
+      const before = (await db.query('select count(*)::integer as count from activities')).rows[0].count;
       await assert.rejects(importActivity({...payload, source_hash:'c'.repeat(64), source_identity:'negative', distance_meters:-1000}));
-      assert.equal((await db.query('select * from activities')).rows.length, 1);
+      assert.equal((await db.query('select count(*)::integer as count from activities')).rows[0].count, before);
     });
     await t.test('a second user cannot read or link another user’s activity', async () => {
       await db.exec(`set request.jwt.claim.sub='${other}';`);
@@ -104,6 +124,18 @@ test('database migrations: authentication, owner isolation, atomic writes and co
       const second = (await write(first.revision,'second')).rows[0];
       assert.notEqual(second.revision,first.revision);
       assert.equal((await db.query('select notes from training_plan_logs where id=$1',[inserted.id])).rows[0].notes,'second');
+    });
+    await t.test('legacy plan upsert keeps stale protection when the server revision trigger is active', async () => {
+      const upsertPlan = log => scalar('select public.upsert_training_plan_log($1::jsonb) as result', [JSON.stringify(log)]);
+      const first = await upsertPlan({plan_block_id:'rpc-block', plan_day_id:'rpc-day', plan_date:'2026-09-18', status:'completed', updated_at:'2000-01-01T00:00:00Z', notes:'first'});
+      assert.equal(first.status, 'accepted');
+      assert.notEqual(first.updated_at, '2000-01-01T00:00:00+00:00');
+      const stale = await upsertPlan({plan_block_id:'rpc-block', plan_day_id:'rpc-day', plan_date:'2026-09-18', status:'skipped', updated_at:'2000-01-01T00:00:01Z', notes:'stale'});
+      assert.equal(stale.status, 'ignored_stale');
+      assert.equal((await db.query("select notes from training_plan_logs where plan_block_id='rpc-block'")).rows[0].notes, 'first');
+      const accepted = await upsertPlan({plan_block_id:'rpc-block', plan_day_id:'rpc-day', plan_date:'2026-09-18', status:'completed', updated_at:first.updated_at, notes:'second'});
+      assert.equal(accepted.status, 'accepted');
+      assert.equal((await db.query("select notes from training_plan_logs where plan_block_id='rpc-block'")).rows[0].notes, 'second');
     });
     await t.test('legacy re-import complements one old activity and preserves its notes and children', async () => {
       const legacy = {...payload, filename:'legacy.fit', activity_date:'2026-07-01', started_at:'2026-07-01T08:00:00Z', source_hash:'d'.repeat(64), source_identity:'legacy-upgrade'};

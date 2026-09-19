@@ -338,8 +338,12 @@
       const rows = await response.json();
       const cloud = {};
       rows.forEach(row => {
-        cloud[row.plan_day_id] = CORE.normalizeLogFromCloud ? CORE.normalizeLogFromCloud(row) : row;
-        if (row.activity_id) state.activityLinks[row.plan_day_id] = String(row.activity_id);
+        const dayId = String(row.plan_day_id || '');
+        if (!isKnownPlanDayId(dayId)) return;
+        const normalized = normalizeRemoteLog(row);
+        if (!normalized) return;
+        cloud[dayId] = normalized;
+        if (normalized.activityId) state.activityLinks[dayId] = normalized.activityId;
       });
       saveActivityLinks();
       const result = CORE.mergeLogs ? CORE.mergeLogs(state.logs, cloud) : { merged: { ...cloud, ...state.logs }, pending: [], conflicts: [] };
@@ -360,7 +364,7 @@
       plan_block_id: blockId,
       plan_day_id: day._planDayId || day.id || day.date,
       plan_date: day.date,
-      status: checkIn.status || 'planned',
+      status: safeStatus(checkIn),
       rpe: checkIn.rpe,
       hip_pain: checkIn.hipPain,
       sleep_quality: checkIn.sleepQuality,
@@ -403,7 +407,7 @@
       const baseline = local._cloudUpdatedAt || null;
       if (state.blockInfo?.id !== scopeBlockId || state.ownerId !== scopeOwnerId) return;
       if ((baseline && !remote) || (baseline && remote && !sameTimestamp(remote.updated_at, baseline)) || (!baseline && remote)) {
-        state.conflicts[dayId] = { local: { ...local }, cloud: CORE.normalizeLogFromCloud ? CORE.normalizeLogFromCloud(remote) : remote };
+        state.conflicts[dayId] = { local: { ...local }, cloud: normalizeRemoteLog(remote) || {} };
         state.syncStatus = 'conflict';
         return;
       }
@@ -424,7 +428,7 @@
           const latestRows = latestResponse.ok ? await latestResponse.json() : [];
           if (state.blockInfo?.id !== scopeBlockId || state.ownerId !== scopeOwnerId) return;
           const latest = latestRows[0] || remote;
-          state.conflicts[dayId] = { local: { ...local }, cloud: CORE.normalizeLogFromCloud ? CORE.normalizeLogFromCloud(latest) : latest };
+          state.conflicts[dayId] = { local: { ...local }, cloud: normalizeRemoteLog(latest) || {} };
           state.syncStatus = 'conflict';
           return;
         }
@@ -435,7 +439,7 @@
       if (state.blockInfo?.id !== scopeBlockId || state.ownerId !== scopeOwnerId) return;
       if (remote) {
         if (!Array.isArray(changed) || !changed.length) {
-          state.conflicts[dayId] = { local: { ...local }, cloud: CORE.normalizeLogFromCloud(remote) };
+          state.conflicts[dayId] = { local: { ...local }, cloud: normalizeRemoteLog(remote) || {} };
           state.syncStatus = 'conflict';
           return;
         }
@@ -696,7 +700,8 @@
         return;
       }
       const log = state.logs[session.id] || { status: 'planned' };
-      $('today-card').innerHTML = `<div class="card-header"><span class="card-title">${todaySession ? 'Dagens pass' : 'Första aktuella passet'}</span><span class="status-badge status-${log.status || 'planned'}">${log.status === 'completed' ? 'Klar' : 'Planerad'}</span></div><div class="today-title">${escapeHtml(session.title)}</div><div class="today-meta">${formatDate(session.date)} · ${session.durationMinutes} min · ${escapeHtml(sessionTypeLabel(session.type))}</div><p class="nutrition-copy">${escapeHtml(session.rationale || proposal.rationale)}</p><button class="btn btn-primary btn-sm" data-current-today-check="${escapeHtml(session.id)}" type="button">${log.status === 'completed' ? 'Ångra klar' : 'Markera klar'}</button>`;
+      const status = safeStatus(log);
+      $('today-card').innerHTML = `<div class="card-header"><span class="card-title">${todaySession ? 'Dagens pass' : 'Första aktuella passet'}</span><span class="status-badge status-${status}">${status === 'completed' ? 'Klar' : 'Planerad'}</span></div><div class="today-title">${escapeHtml(session.title)}</div><div class="today-meta">${formatDate(session.date)} · ${session.durationMinutes} min · ${escapeHtml(sessionTypeLabel(session.type))}</div><p class="nutrition-copy">${escapeHtml(session.rationale || proposal.rationale)}</p><button class="btn btn-primary btn-sm" data-current-today-check="${escapeHtml(session.id)}" type="button">${status === 'completed' ? 'Ångra klar' : 'Markera klar'}</button>`;
       const todayButton = $('today-card').querySelector('[data-current-today-check]');
       todayButton?.addEventListener('click', () => toggleProposalCheck(todayButton.dataset.currentTodayCheck));
       return;
@@ -723,10 +728,11 @@
     }
 
     const log = getLog(day);
+    const status = safeStatus(log);
     $('today-card').innerHTML = `
       <div class="card-header">
         <span class="card-title">${todayDay ? 'Dagens pass' : 'Planläge'}</span>
-        <span class="status-badge status-${log.status || 'planned'}">${statusLabels[log.status || 'planned']}</span>
+        <span class="status-badge status-${status}">${statusLabels[status]}</span>
       </div>
       <div class="today-title">${escapeHtml(day.title)}</div>
       <div class="today-meta">${escapeHtml(day.weekday)} ${formatDate(day.date)} · ${escapeHtml(day.durationRange || '')} · ${escapeHtml(day.distanceRangeKm || '0')} km</div>
@@ -787,10 +793,15 @@
     const labels = {
       synced: 'Synkat mellan dina enheter.', syncing: 'Synkar…', 'local-pending': 'Sparat lokalt. En ändring väntar på ny synkning.', online: 'Aktiviteter hämtade.',
       'local-only': 'Lokal kopia – logga in för synkning.', local: 'Sparar lokalt i webbläsaren.',
-      'local-offline': 'Sparat lokalt. Försök synka igen när anslutningen fungerar.', conflict: 'Konflikt kräver ett uttryckligt val.'
+      'local-offline': 'Sparat lokalt, men inte synkat. Försök igen när anslutningen fungerar.', conflict: 'Konflikt kräver ett uttryckligt val.'
     };
     const pending = Object.keys(state.pendingSync).length;
     note.textContent = `${labels[state.syncStatus] || labels.local}${pending ? ` ${pending} ändring${pending === 1 ? '' : 'ar'} väntar.` : ''}`;
+    const retry = $('retry-sync');
+    if (retry) {
+      retry.hidden = !['local-pending', 'local-offline'].includes(state.syncStatus);
+      retry.textContent = state.syncStatus === 'local-offline' ? 'Försök synka igen' : 'Synka väntande ändringar';
+    }
     const legacyButton = $('import-legacy-local-logs');
     if (legacyButton) legacyButton.disabled = !state.ownerId || !Object.keys(readLegacyLogs()).length;
   }
@@ -800,8 +811,9 @@
       const sessions = state.currentProposal?.sessions || [];
       $('week-plan').innerHTML = sessions.map(session => {
         const log = state.logs[session.id] || { status: 'planned' };
+        const status = safeStatus(log);
         const selected = session.id === state.selectedDayId;
-        return `<button class="week-day${selected ? ' active' : ''}" type="button" data-day-id="${escapeHtml(session.id)}"><div><div class="week-day-date">${escapeHtml(session.date)}</div><div class="week-day-meta">Aktuell vecka</div></div><div><div class="week-day-title">${escapeHtml(session.title)}</div><div class="week-day-meta">${session.durationMinutes} min · ${escapeHtml(sessionTypeLabel(session.type))}</div></div><span class="status-badge status-${log.status || 'planned'}">${log.status === 'completed' ? 'Klar' : 'Planerad'}</span></button>`;
+        return `<button class="week-day${selected ? ' active' : ''}" type="button" data-day-id="${escapeHtml(session.id)}"><div><div class="week-day-date">${escapeHtml(session.date)}</div><div class="week-day-meta">Aktuell vecka</div></div><div><div class="week-day-title">${escapeHtml(session.title)}</div><div class="week-day-meta">${session.durationMinutes} min · ${escapeHtml(sessionTypeLabel(session.type))}</div></div><span class="status-badge status-${status}">${status === 'completed' ? 'Klar' : 'Planerad'}</span></button>`;
       }).join('') || '<div class="empty">Inga dagar ryms inom vald veckotid.</div>';
       $('week-plan').querySelectorAll('[data-day-id]').forEach(button => {
         button.addEventListener('click', () => { state.selectedDayId = button.dataset.dayId; render(); });
@@ -811,6 +823,7 @@
     const days = visibleDays(daysForWeek(state.selectedWeek));
     $('week-plan').innerHTML = days.map(day => {
       const log = getLog(day);
+      const status = safeStatus(log);
       const isToday = day.date === todayLocalIso();
       const isSelected = day._planDayId === state.selectedDayId;
       const muted = state.fourPassMode && isOptionalRecovery(day);
@@ -824,7 +837,7 @@
             <div class="week-day-title">${escapeHtml(day.title)}</div>
             <div class="week-day-meta">${escapeHtml(day.distanceRangeKm || '0')} km · ${escapeHtml(day.intensity || '')}</div>
           </div>
-          <span class="status-badge status-${log.status || 'planned'}">${statusLabels[log.status || 'planned']}</span>
+          <span class="status-badge status-${status}">${statusLabels[status]}</span>
         </button>`;
     }).join('') || '<div class="empty">Inga dagar att visa i detta läge.</div>';
 
@@ -1004,8 +1017,18 @@
     const day = selectedDay();
     if (!day) return;
     const dayId = day._planDayId || day.id || day.date;
-    const values = currentCheckInValues();
     const existing = getLog(day);
+    let values;
+    try {
+      values = typeof AppSecurity !== 'undefined' && typeof AppSecurity.normalizePlanLog === 'function'
+        ? AppSecurity.normalizePlanLog(currentCheckInValues())
+        : currentCheckInValues();
+    } catch (error) {
+      toast(typeof AppSecurity !== 'undefined' && typeof AppSecurity.safeErrorMessage === 'function'
+        ? AppSecurity.safeErrorMessage(error, 'Kontrollera check-in-värdena.')
+        : 'Kontrollera check-in-värdena.');
+      return;
+    }
     if (existing.activityId) values.activityId = existing.activityId;
     if (existing._cloudUpdatedAt) values._cloudUpdatedAt = existing._cloudUpdatedAt;
     values.planDate = day.date;
@@ -1062,7 +1085,13 @@
       toast('Logga in innan äldre lokala loggar kopieras till kontot.');
       return;
     }
-    const legacy = readLegacyLogs();
+    let legacy;
+    try {
+      legacy = normalizeImportedLogs(readLegacyLogs());
+    } catch (error) {
+      toast('Äldre lokala loggar kunde inte valideras.');
+      return;
+    }
     const keys = Object.keys(legacy);
     if (!keys.length) {
       toast('Inga äldre lokala loggar hittades för detta planblock.');
@@ -1072,7 +1101,7 @@
     const importedAt = new Date().toISOString();
     keys.forEach(key => {
       if (state.logs[key]) return;
-      state.logs[key] = { ...legacy[key], updatedAt: legacy[key].updatedAt || importedAt, _pending: true, importedFromLegacy: true };
+      state.logs[key] = prepareImportedLog(legacy[key], importedAt, { importedFromLegacy: true });
       state.pendingSync[key] = true;
     });
     saveLogs();
@@ -1087,7 +1116,8 @@
       version: 1,
       exportedAt: new Date().toISOString(),
       planBlockId: state.blockInfo.id,
-      logs: state.logs
+      logs: state.logs,
+      activityLinks: normalizeActivityLinks(state.activityLinks, state.logs)
     };
     downloadJson(`training-plan-logs-${state.blockInfo.id}.json`, payload);
   }
@@ -1099,15 +1129,17 @@
 
     try {
       const parsed = JSON.parse(await file.text());
-      const importedLogs = parsed.logs;
       if (!parsed.planBlockId || parsed.planBlockId !== state.blockInfo.id) {
         toast('Import blockerad: backupen hör inte till aktuellt planblock.');
         return;
       }
-      if (!isPlainObject(importedLogs)) {
-        toast('Import blockerad: backupen saknar giltiga loggar.');
-        return;
-      }
+      const importedLogs = normalizeImportedLogs(parsed.logs);
+      const legacyLinks = parsed.activityLinks === undefined
+        ? Object.fromEntries(Object.entries(importedLogs)
+          .filter(([, log]) => log?.activityId)
+          .map(([dayId, log]) => [dayId, log.activityId]))
+        : parsed.activityLinks;
+      const importedLinks = normalizeActivityLinks(legacyLinks, importedLogs, { strict: true });
 
       const mode = (prompt(IMPORT_MODE_PROMPT, 'merge') || '').trim().toLowerCase();
       if (!mode) {
@@ -1122,18 +1154,24 @@
       const importedAt = new Date().toISOString();
       if (mode === 'replace') state.pendingSync = {};
       const nextLogs = mode === 'replace' ? {} : { ...state.logs };
+      const nextLinks = mode === 'replace' ? {} : { ...state.activityLinks };
       Object.entries(importedLogs).forEach(([dayId, imported]) => {
         if (mode === 'merge' && state.logs[dayId]) return;
-        nextLogs[dayId] = { ...imported, updatedAt: imported.updatedAt || importedAt, _pending: true };
+        nextLogs[dayId] = prepareImportedLog(imported, importedAt);
+        if (importedLinks[dayId]) nextLinks[dayId] = importedLinks[dayId];
         state.pendingSync[dayId] = true;
       });
       state.logs = nextLogs;
+      state.activityLinks = nextLinks;
       saveLogs();
+      saveActivityLinks();
       render();
       retryPendingSync();
       toast(mode === 'replace' ? 'Backup importerad och ersatte loggar' : 'Backup importerad och ihopslagen');
     } catch (error) {
-      toast('Kunde inte importera backup');
+      toast('Import blockerad: ' + (typeof AppSecurity !== 'undefined' && typeof AppSecurity.safeErrorMessage === 'function'
+        ? AppSecurity.safeErrorMessage(error, 'Backupen är ogiltig.')
+        : 'Backupen är ogiltig.'));
       console.warn('Training plan import failed:', error);
     }
   }
@@ -1324,12 +1362,151 @@
     return state.logs[key] || { status: 'planned' };
   }
 
+  function safeStatus(log) {
+    return statusLabels[log?.status] ? log.status : 'planned';
+  }
+
+  function isProposalDayId(dayId) {
+    const match = /^proposal:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/.exec(String(dayId || ''));
+    if (!match) return false;
+    const dates = match.slice(1).map(value => new Date(`${value}T00:00:00Z`));
+    if (dates.some((date, index) => !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== match[index + 1])) return false;
+    const days = (dates[1] - dates[0]) / 86400000;
+    return days >= 0 && days < 7;
+  }
+
+  function allowedLogDayIds() {
+    const ids = state.days.map(day => String(day._planDayId));
+    (state.currentProposal?.sessions || []).forEach(session => ids.push(String(session.id)));
+    return [...new Set(ids)];
+  }
+
+  function isKnownPlanDayId(dayId) {
+    const value = String(dayId || '');
+    return allowedLogDayIds().includes(value) || isProposalDayId(value);
+  }
+
+  function normalizeStoredLog(raw) {
+    if (typeof AppSecurity === 'undefined' || typeof AppSecurity.normalizePlanLog !== 'function') {
+      return isPlainObject(raw) ? { ...raw } : null;
+    }
+    const normalized = AppSecurity.normalizePlanLog(raw);
+    const result = { ...normalized };
+    if (typeof raw.activityId === 'string' && raw.activityId.length <= 200) result.activityId = raw.activityId;
+    if (typeof raw._cloudUpdatedAt === 'string' && raw._cloudUpdatedAt.length <= 40 && Number.isFinite(Date.parse(raw._cloudUpdatedAt))) {
+      result._cloudUpdatedAt = raw._cloudUpdatedAt;
+    }
+    if (typeof raw.planDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.planDate)) result.planDate = raw.planDate;
+    for (const key of ['planTitle', 'planType']) {
+      if (typeof raw[key] === 'string' && raw[key].length <= 500) result[key] = raw[key];
+    }
+    if (raw._pending === true || raw._pending === false) result._pending = raw._pending;
+    if (raw.importedFromLegacy === true) result.importedFromLegacy = true;
+    return result;
+  }
+
+  function normalizeRemoteLog(row) {
+    try {
+      const normalized = normalizeStoredLog(CORE.normalizeLogFromCloud ? CORE.normalizeLogFromCloud(row) : {
+        status: row.status,
+        rpe: row.rpe,
+        hipPain: row.hip_pain,
+        sleepQuality: row.sleep_quality,
+        stress: row.stress,
+        energy: row.energy,
+        actualDistanceKm: row.actual_distance_km,
+        actualDurationMinutes: row.actual_duration_minutes,
+        notes: row.notes || '',
+        activityId: row.activity_id || null,
+        updatedAt: row.updated_at
+      });
+      if (!normalized) return null;
+      normalized._pending = false;
+      normalized._cloudUpdatedAt = row.updated_at || normalized.updatedAt || null;
+      return normalized;
+    } catch (_) {
+      console.warn('Ogiltig fjärrlogg hoppades över:', row?.plan_day_id);
+      return null;
+    }
+  }
+
+  function normalizeImportedLogs(logs) {
+    if (!isPlainObject(logs)) throw new Error('Backupen saknar giltiga loggar.');
+    if (typeof AppSecurity !== 'undefined' && typeof AppSecurity.normalizePlanLogs === 'function') {
+      // Validate the complete backup through the security boundary first, then
+      // normalize each original row so plan metadata and activityId survive.
+      AppSecurity.normalizePlanLogs(logs, [...allowedLogDayIds(), ...Object.keys(logs).filter(isProposalDayId)]);
+    }
+    const normalized = {};
+    Object.entries(logs).forEach(([dayId, raw]) => {
+      if (!isKnownPlanDayId(dayId)) throw new Error('Backupen innehåller en okänd plandag.');
+      normalized[dayId] = normalizeStoredLog(raw);
+      if (!normalized[dayId]) throw new Error('Backupen innehåller en ogiltig planlogg.');
+    });
+    return normalized;
+  }
+
+  function normalizeActivityLinks(rawLinks, logs = {}, options = {}) {
+    if (rawLinks === undefined || rawLinks === null) return {};
+    if (!isPlainObject(rawLinks)) throw new Error('Backupen saknar giltiga aktivitetskopplingar.');
+    const normalized = {};
+    Object.entries(rawLinks).forEach(([dayId, rawActivityId]) => {
+      const knownDay = allowedLogDayIds().includes(dayId) || isProposalDayId(dayId);
+      if (!knownDay) {
+        if (options.strict) throw new Error('Backupen innehåller en okänd koppling.');
+        return;
+      }
+      const activityId = typeof rawActivityId === 'string'
+        ? rawActivityId
+        : (Number.isFinite(rawActivityId) ? String(rawActivityId) : '');
+      if (!activityId || activityId.length > 200) {
+        if (options.strict) throw new Error('Backupen innehåller en ogiltig aktivitetskoppling.');
+        return;
+      }
+      const log = logs[dayId];
+      if (!log || (log.activityId && String(log.activityId) !== activityId)) {
+        if (options.strict) throw new Error('Backupens aktivitetskoppling stämmer inte med planloggen.');
+        return;
+      }
+      if (!log.activityId) {
+        if (!options.strict) return;
+        log.activityId = activityId;
+      }
+      normalized[dayId] = activityId;
+    });
+    return normalized;
+  }
+
+  function prepareImportedLog(log, importedAt, extra = {}) {
+    const prepared = {
+      ...log,
+      ...extra,
+      updatedAt: log.updatedAt || importedAt,
+      _pending: true
+    };
+    // A backup is local input, never proof of the current cloud revision.
+    delete prepared._cloudUpdatedAt;
+    return prepared;
+  }
+
   function loadLogs() {
     try {
       const value = JSON.parse(localStorage.getItem(logsKey()) || '{}');
-      return isPlainObject(value) ? value : {};
+      if (!isPlainObject(value)) throw new Error('Ogiltigt lokalt loggformat.');
+      const valid = {};
+      Object.entries(value).forEach(([dayId, raw]) => {
+        if (!allowedLogDayIds().includes(dayId) && !isProposalDayId(dayId)) return;
+        try {
+          const normalized = normalizeStoredLog(raw);
+          if (normalized) valid[dayId] = normalized;
+        } catch (_) {
+          console.warn('Ogiltig lokal planlogg hoppades över:', dayId);
+        }
+      });
+      localStorage.setItem(logsKey(), JSON.stringify(valid));
+      return valid;
     } catch (error) {
-      localStorage.removeItem(logsKey());
+      console.warn('Lokala planloggar kunde inte läsas. Nyckeln behålls för manuell återställning.');
       return {};
     }
   }

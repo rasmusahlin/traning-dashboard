@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://mpmtvydpiihfltldaxkt.supabase.co; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Inställningar – Träningsdashboard</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -118,10 +119,21 @@
     <p class="muted">Det finns äldre pulsinställningar eller passklassningar utan kontoangivelse. Importera bara om de är dina. De gamla värdena finns kvar efter import.</p>
     <button class="btn" id="legacy-import">Importera till mitt konto</button><span id="legacy-status" role="status"></span>
   </section>
+  <!-- Safe setup reminder -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Databasuppsättning</span></div>
+    <p style="font-size:14px;color:var(--text2);line-height:1.6">
+      Databasen ska alltid sättas upp med det fail-closed flöde som beskrivs i
+      <a href="README.md">README</a>. Kör aldrig fristående tabell-SQL utan RLS.
+      För full lokal MVP krävs schema samt migration 001–004 och därefter 005_activity_import, 006_plan_activity_links och 007_training_profiles i ordning.
+    </p>
+  </div>
 </div>
 
 <div id="toast" class="toast"></div>
 
+<script src="js/security.js"></script>
+<script src="js/data-utils.js"></script>
 <script src="js/db.js"></script>
 <script src="js/profile.js"></script>
 <script src="js/training.js"></script>
@@ -169,14 +181,33 @@ async function saveSettings() {
   renderZonePreview();
 }
 
-
-
 function readJsonSetting(key) {
   try {
     return JSON.parse(localStorage.getItem(key) || '{}');
   } catch(e) {
     return {};
   }
+}
+
+function readPlanLogSettings(ownerId) {
+  const blocks = {};
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const validOwner = typeof ownerId === 'string'
+    && uuidPattern.test(ownerId)
+    && (typeof AppSecurity === 'undefined' || typeof AppSecurity.isUuid !== 'function' || AppSecurity.isUuid(ownerId));
+  if (!validOwner) return { source: 'local_pending', storage_version: 'training_plan_logs_v2', owner_bound: false, blocks };
+  const prefix = `training_plan_logs_v2:${ownerId}:`;
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith(prefix)) continue;
+    const blockId = key.slice(prefix.length);
+    if (!blockId) continue;
+    const stored = readJsonSetting(key);
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) continue;
+    const pending = Object.fromEntries(Object.entries(stored).filter(([, log]) => log && log._pending === true));
+    if (Object.keys(pending).length) blocks[blockId] = pending;
+  }
+  return { source: 'local_pending', storage_version: 'training_plan_logs_v2', owner_bound: true, blocks };
 }
 
 function exportFileName() {
@@ -203,20 +234,34 @@ function downloadJson(data, filename) {
 
 async function fetchAllRows(table, query, label) {
   document.getElementById('export-status').textContent = `Hämtar ${label.toLowerCase()}…`;
-  const rows = await dbQueryAll(`${table}?${query}`);
+  const rows = await dbQueryAll(`${table}?${query}`, {
+    onPage: count => { document.getElementById('export-status').textContent = `${label}: ${count} rader`; }
+  });
   document.getElementById('export-status').textContent = `${label}: ${rows.length} rader`;
   return rows;
 }
 
 async function loadExportTables() {
+  let ownerId = null;
+  try {
+    const session = typeof getValidSession === 'function' ? await getValidSession() : null;
+    ownerId = session?.user?.id || null;
+  } catch (_) {}
   return {
     activities: await fetchAllRows('activities', 'order=activity_date.asc,id.asc', 'Aktiviteter'),
     laps: await fetchAllRows('laps', 'order=activity_id.asc,lap_index.asc,id.asc', 'Laps'),
     km_splits: await fetchAllRows('km_splits', 'order=activity_id.asc,km.asc,id.asc', 'Km-splits'),
     time_series: await fetchAllRows('time_series', 'order=activity_id.asc,t.asc,id.asc', 'Tidsserie'),
     training_plan_logs: await fetchAllRows('training_plan_logs', 'order=plan_date.asc,id.asc', 'Planloggar'),
-    training_profiles: await dbQuery('training_profiles?select=*')
+    training_profiles: await dbQuery('training_profiles?select=*'),
+    local_pending_plan_logs: readPlanLogSettings(ownerId)
   };
+}
+
+function tableCounts(tables) {
+  return Object.fromEntries(Object.entries(tables)
+    .filter(([, rows]) => Array.isArray(rows))
+    .map(([key, rows]) => [key, rows.length]));
 }
 
 function setExportBusy(isBusy) {
@@ -281,19 +326,18 @@ function zoneForHrValue(hr, zones) {
   return zones.find(z => bpm >= z.min && bpm < z.max) || zones[zones.length - 1] || null;
 }
 
-function zoneKey(zone) {
-  return zone ? `z${zone.num}` : null;
-}
-
 function zoneNumFromLabel(label) {
   const match = String(label || '').match(/Z(\d)/i);
   return match ? Number(match[1]) : null;
 }
 
+function zoneKey(zone) {
+  return zone ? `z${zone.num}` : null;
+}
+
 function createZoneBuckets(zones) {
   return Object.fromEntries(zones.map(z => [
-    zoneKey(z),
-    {
+    zoneKey(z), {
       name: z.name,
       min_hrr_percent: Math.round(z.minPct * 100),
       max_hrr_percent: Math.round(z.maxPct * 100),
@@ -305,24 +349,13 @@ function createZoneBuckets(zones) {
   ]));
 }
 
-function addZoneSeconds(buckets, zones, hr, seconds) {
-  const sec = finiteNumber(seconds);
-  if (!sec || sec <= 0) return false;
-  const zone = zoneForHrValue(hr, zones);
-  const key = zoneKey(zone);
-  if (!key || !buckets[key]) return false;
-  buckets[key].seconds += sec;
-  return true;
-}
-
 function finalizeZoneBuckets(buckets) {
   const total = Object.values(buckets).reduce((sum, z) => sum + z.seconds, 0);
   Object.values(buckets).forEach(z => {
     z.seconds = roundNumber(z.seconds, 1) || 0;
     z.percent = total ? roundNumber((z.seconds / total) * 100, 1) : 0;
   });
-  const dominant = Object.entries(buckets)
-    .sort((a, b) => b[1].seconds - a[1].seconds)[0];
+  const dominant = Object.entries(buckets).sort((a, b) => b[1].seconds - a[1].seconds)[0];
   return {
     total_seconds: roundNumber(total, 1) || 0,
     dominant_zone: dominant && dominant[1].seconds > 0 ? dominant[0].toUpperCase() : null,
@@ -756,8 +789,8 @@ function buildCoachExportData(tables) {
         from: dates[0] || null,
         to: dates[dates.length - 1] || null
       },
-      table_counts: Object.fromEntries(Object.entries(tables).map(([key, rows]) => [key, rows.length])),
-      includes: ['coach_analysis_per_activity', 'laps', 'km_splits', 'time_series_summary', 'raw_per_activity', 'training_plan_logs', 'local_settings']
+      table_counts: tableCounts(tables),
+      includes: ['coach_analysis_per_activity', 'laps', 'km_splits', 'time_series_summary', 'raw_per_activity', 'training_plan_logs', 'local_pending_plan_logs', 'local_settings']
     },
     local_settings: {
       hr_method: method,
@@ -773,9 +806,11 @@ function buildCoachExportData(tables) {
         max_bpm:Number.isFinite(z.max) ? Math.round(z.max) : null
       })),
       class_overrides: TrainingProfile.get().activityOverrides,
-      profile: TrainingProfile.get()
+      profile: TrainingProfile.get(),
+      plan_logs: tables.local_pending_plan_logs
     },
     training_plan_logs: tables.training_plan_logs,
+    local_pending_plan_logs: tables.local_pending_plan_logs,
     activities
   };
 }
@@ -795,8 +830,8 @@ async function exportTrainingData() {
         exported_at: new Date().toISOString(),
         format: 'training-dashboard-export-v1',
         source: 'supabase',
-        table_counts: Object.fromEntries(Object.entries(tables).map(([key, rows]) => [key, rows.length])),
-        includes: ['activities', 'laps', 'km_splits', 'time_series', 'training_plan_logs', 'training_profiles', 'local_settings']
+        table_counts: tableCounts(tables),
+        includes: ['activities', 'laps', 'km_splits', 'time_series', 'training_plan_logs', 'training_profiles', 'local_pending_plan_logs', 'local_settings', 'plan_logs']
       },
       local_settings: {
         hr_method: method,
@@ -812,7 +847,8 @@ async function exportTrainingData() {
           max:Number.isFinite(z.max) ? z.max : null
         })),
         class_overrides: TrainingProfile.get().activityOverrides,
-        profile: TrainingProfile.get()
+        profile: TrainingProfile.get(),
+        plan_logs: tables.local_pending_plan_logs
       },
       tables
     };
@@ -855,11 +891,16 @@ async function exportCoachData() {
 }
 
 async function loadCounts() {
-  await Promise.all(['activities','laps','km_splits'].map(async (table,index) => {
-    const el = document.getElementById(['count-activities','count-laps','count-splits'][index]);
-    try { el.textContent = String((await dbQueryAll(`${table}?select=id`)).length); }
-    catch (_) { el.textContent = 'Kunde inte hämtas'; }
-  }));
+  try {
+    const [a, l, s] = await Promise.all([
+      dbCount('activities'),
+      dbCount('laps').catch(()=>null),
+      dbCount('km_splits').catch(()=>null)
+    ]);
+    document.getElementById('count-activities').textContent = `${a} pass`;
+    document.getElementById('count-laps').textContent = l === null ? 'Tabell saknas' : `${l} laps`;
+    document.getElementById('count-splits').textContent = s === null ? 'Tabell saknas' : `${s} km-splits`;
+  } catch(e) {}
 }
 
 function legacySettings() {

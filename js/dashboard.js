@@ -1,13 +1,14 @@
 (() => {
   const $ = id => document.getElementById(id);
-  const esc = value => escapeHtml(String(value ?? ''));
+  const esc = value => AppSecurity.escapeHtml(String(value ?? ''));
   let activities = [];
   let visible = 20;
   let chart;
   const today = Training.localDate(new Date());
   const number = (value, digits = 0) => Number(value).toLocaleString('sv-SE', { maximumFractionDigits: digits });
   const signed = (value, unit) => `${value > 0 ? '+' : ''}${number(value, 1)} ${unit} mot föregående period`;
-  const link = id => `activity.html?id=${encodeURIComponent(id)}`;
+  const validActivityId = id => AppSecurity.isUuid(String(id || ''));
+  const link = id => validActivityId(id) ? `activity.html?id=${encodeURIComponent(id)}` : '#';
   function withCoverage(list, profile) {
     list.coverage = { start: profile.coverageStart, through: profile.coverageThrough };
     return list;
@@ -16,7 +17,7 @@
   async function init() {
     try {
       await TrainingProfile.load();
-      activities = (await dbQueryAll('activities?order=activity_date.desc,id.desc')).filter(a => a.activity_date <= today);
+      activities = (await dbQueryAll('activities?order=activity_date.desc,id.desc')).filter(a => validActivityId(a.id) && a.activity_date <= today);
       $('filter-from').value = Training.addDays(today, -90);
       $('filter-to').value = today;
       for (const id of ['filter-from','filter-to','type-filter']) $(id).addEventListener('change', () => { visible = 20; renderList(); });
@@ -131,8 +132,13 @@
     for (const button of $('activity-list').querySelectorAll('[data-delete]')) button.addEventListener('click', async () => {
       if (!confirm('Ta bort detta pass och alla tillhörande detaljer? Detta går inte att ångra i dashboarden.')) return;
       button.disabled = true;
-      try { await dbQuery(`activities?id=eq.${encodeURIComponent(button.dataset.delete)}`, { method:'DELETE' }); activities = activities.filter(a => a.id !== button.dataset.delete); render(); }
-      catch (_) { toast('Passet kunde inte tas bort.'); button.disabled = false; }
+      const id = button.dataset.delete;
+      if (!validActivityId(id)) { toast('Passet kunde inte identifieras.'); button.disabled = false; return; }
+      try {
+        await dbQuery(`activities?${AppSecurity.postgrestUuidFilter('id', id)}`, { method:'DELETE' });
+        activities = activities.filter(a => a.id !== id);
+        render();
+      } catch (_) { toast('Passet kunde inte tas bort.'); button.disabled = false; }
     });
   }
   startApp(init);

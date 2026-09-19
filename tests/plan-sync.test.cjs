@@ -22,6 +22,7 @@ class FakeElement {
   querySelectorAll() { return []; }
   querySelector() { return null; }
   click() {}
+  remove() {}
 }
 
 class FakeStorage {
@@ -183,4 +184,156 @@ test('plan selector waits for an in-flight write and keeps its original block sc
   assert.equal(blockBPlanFetches, 1);
   const blockBLog = storage.getItem('training_plan_logs_v2:user-1:block-b');
   assert.equal(blockBLog, '{}', 'the old block log must not be applied to the new block');
+});
+
+test('plan backup preserves metadata and activity links while imported rows stay pending', async () => {
+  const ids = [
+    'plan-loading', 'plan-error', 'plan-app', 'weight-kg', 'four-pass-mode', 'hide-optional',
+    'prev-week', 'next-week', 'week-select', 'plan-history-select', 'checkin-form', 'checkin-status',
+    'checkin-rpe', 'checkin-hip', 'checkin-sleep', 'checkin-stress', 'checkin-energy',
+    'checkin-distance', 'checkin-duration', 'checkin-notes', 'mark-completed', 'mark-scaled',
+    'mark-skipped', 'export-logs-btn', 'import-logs-btn', 'import-logs-file', 'import-legacy-local-logs',
+    'export-summary-json', 'export-summary-csv', 'activity-link-panel', 'current-plan-proposal',
+    'plan-block-label', 'plan-block-status', 'metric-distance-label', 'metric-week', 'metric-week-dates',
+    'metric-distance', 'metric-distance-optional', 'metric-quality', 'metric-quality-sub', 'metric-block',
+    'metric-block-sub', 'week-summary-label', 'today-card', 'week-plan', 'day-detail', 'nutrition-card',
+    'readiness-card', 'block-summary', 'sync-note', 'current-plan-proposal'
+  ];
+  const elements = new Map(ids.map(id => [id, new FakeElement(id)]));
+  const storage = new FakeStorage();
+  const logsKey = 'training_plan_logs_v2:user-1:block-a';
+  const linksKey = 'training_plan_activity_links_v1:user-1:block-a';
+  storage.setItem(logsKey, JSON.stringify({
+    'a-day': {
+      status: 'completed', rpe: 7, notes: 'Syntetisk backup', activityId: 'activity-1',
+      planDate: '2026-09-18', planTitle: 'Originaltitel', planType: 'quality',
+      updatedAt: '2026-09-18T10:00:00.000Z', _pending: false,
+      _cloudUpdatedAt: '2026-09-18T12:00:00.000Z'
+    }
+  }));
+  storage.setItem(linksKey, JSON.stringify({ 'a-day': 'activity-1' }));
+  const document = {
+    currentScript: { src: 'https://app.test/plan/plan.js' },
+    getElementById(id) {
+      if (!elements.has(id)) elements.set(id, new FakeElement(id));
+      return elements.get(id);
+    },
+    createElement() { return new FakeElement('download'); },
+    body: { appendChild() {} },
+    addEventListener(type, listener) { this.listeners[type] = listener; },
+    listeners: {}
+  };
+  let downloaded = null;
+  class TestURL extends URL {}
+  TestURL.createObjectURL = blob => { downloaded = blob; return 'blob:test'; };
+  TestURL.revokeObjectURL = () => {};
+  let initPromise;
+  const fetch = async url => {
+    const textUrl = String(url);
+    if (textUrl.includes('plan-blocks.json')) {
+      return response({ activePlanBlockId: 'block-a', blocks: [{ id: 'block-a', title: 'Aktiv plan', path: 'plan-a.json' }] });
+    }
+    if (textUrl.endsWith('/plan-a.json')) return response(plan('a', 'Aktiv plan'));
+    throw new Error(`Unexpected fetch: ${textUrl}`);
+  };
+  const context = {
+    document,
+    window: { location: { href: 'https://app.test/plan/' } },
+    localStorage: storage,
+    fetch,
+    AppSecurity: require('../js/security.js'),
+    PlanCore: {
+      planState: () => ({ state: 'active', reason: '' }),
+      proposeWeeklySchedule: () => ({ startDate: '2026-09-14', endDate: '2026-09-20', sessions: [], cautions: [], rationale: 'Test' }),
+      normalizeLogFromCloud: row => ({ ...row, updatedAt: row.updated_at, _cloudUpdatedAt: row.updated_at }),
+      mergeLogs: (local, cloud) => ({ merged: { ...cloud, ...local }, pending: Object.keys(local).filter(key => local[key]?._pending), conflicts: [], conflictEntries: {} }),
+      matchActivitiesToPlan: () => ({ proposals: [] })
+    },
+    getValidSession: async () => ({ user: { id: 'user-1' } }),
+    TrainingProfile: { load: async () => ({}) },
+    toast() {},
+    prompt: () => 'replace',
+    startApp(init) { initPromise = init(); return initPromise; },
+    console,
+    URL: TestURL,
+    Blob,
+    setTimeout,
+    clearTimeout
+  };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync('js/plan.js', 'utf8'), context, { filename: 'js/plan.js' });
+  document.listeners.DOMContentLoaded();
+  await initPromise;
+
+  elements.get('export-logs-btn').listeners.click();
+  const exported = JSON.parse(await downloaded.text());
+  assert.deepEqual(exported.activityLinks, { 'a-day': 'activity-1' });
+  assert.equal(exported.logs['a-day'].planTitle, 'Originaltitel');
+
+  const importedFile = {
+    async text() {
+      return JSON.stringify({
+        app: 'training-dashboard-plan', version: 1, planBlockId: 'block-a',
+        logs: {
+          'a-day': {
+            status: 'completed', rpe: 8, notes: 'Återimporterad', activityId: 'activity-1',
+            planDate: '2026-09-18', planTitle: 'Återimporterad titel', planType: 'test',
+            updatedAt: '2026-09-19T10:00:00.000Z', _pending: false,
+            _cloudUpdatedAt: '2026-09-18T12:00:00.000Z'
+          }
+        },
+        activityLinks: { 'a-day': 'activity-1' }
+      });
+    }
+  };
+  const input = elements.get('import-logs-file');
+  input.files = [importedFile];
+  await input.listeners.change({ target: input });
+  await Promise.resolve();
+  const restored = JSON.parse(storage.getItem(logsKey));
+  assert.equal(restored['a-day'].planDate, '2026-09-18');
+  assert.equal(restored['a-day'].planTitle, 'Återimporterad titel');
+  assert.equal(restored['a-day'].planType, 'test');
+  assert.equal(restored['a-day'].activityId, 'activity-1');
+  assert.equal(restored['a-day']._pending, true, 'backup data remains queued for account sync');
+  assert.equal(restored['a-day']._cloudUpdatedAt, undefined, 'backup revision is not treated as this account cloud baseline');
+  assert.deepEqual(JSON.parse(storage.getItem(linksKey)), { 'a-day': 'activity-1' });
+
+  const beforeRejectedImport = storage.getItem(logsKey);
+  input.files = [{
+    async text() {
+      return JSON.stringify({
+        planBlockId: 'block-a',
+        logs: { 'a-day': { status: 'completed', activityId: 'activity-1' } },
+        activityLinks: { 'other-day': 'activity-1' }
+      });
+    }
+  }];
+  await input.listeners.change({ target: input });
+  assert.equal(storage.getItem(logsKey), beforeRejectedImport, 'unknown activity links cannot replace account data');
+
+  const historicalId = 'proposal:2026-08-31:2026-09-02';
+  const historicalBackup = {
+    planBlockId: 'block-a',
+    logs: { [historicalId]: { status: 'completed', notes: 'Tidigare vecka', planDate: '2026-09-02', activityId: 'activity-old' } },
+    activityLinks: { [historicalId]: 'activity-old' }
+  };
+  input.files = [{ text: async () => JSON.stringify(historicalBackup) }];
+  await input.listeners.change({ target: input });
+  const historicalRestored = JSON.parse(storage.getItem(logsKey));
+  assert.equal(historicalRestored[historicalId].notes, 'Tidigare vecka');
+  assert.equal(historicalRestored[historicalId]._pending, true);
+  elements.get('export-logs-btn').listeners.click();
+  const historicalExport = JSON.parse(await downloaded.text());
+  assert.equal(historicalExport.activityLinks[historicalId], 'activity-old');
+  input.files = [{ text: async () => JSON.stringify(historicalExport) }];
+  await input.listeners.change({ target: input });
+  assert.equal(JSON.parse(storage.getItem(logsKey))[historicalId].notes, 'Tidigare vecka', 'historical proposal export can be restored');
+
+  const beforeInvalidDates = storage.getItem(logsKey);
+  for (const invalidId of ['proposal:2026-02-30:2026-03-01', 'proposal:2026-08-31:2026-09-20', 'proposal:2026-08-31:2026-08-30']) {
+    input.files = [{ text: async () => JSON.stringify({ planBlockId: 'block-a', logs: { [invalidId]: { status: 'completed' } } }) }];
+    await input.listeners.change({ target: input });
+    assert.equal(storage.getItem(logsKey), beforeInvalidDates, 'invalid historical identifiers cannot replace account data');
+  }
 });

@@ -2,6 +2,7 @@
 <html lang="sv">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://mpmtvydpiihfltldaxkt.supabase.co; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Planeringsanalys – Träningsdashboard</title><link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -33,19 +34,16 @@
   .badge-easy{background:var(--z2);color:var(--z2t)}.badge-long{background:var(--z1);color:var(--z1t)}.badge-threshold{background:var(--z3);color:var(--z3t)}.badge-vo2{background:var(--z5);color:var(--z5t)}.badge-progressive{background:#eeedfe;color:#3c3489}.badge-mixed{background:var(--surface2);color:var(--text2);border:.5px solid var(--border2)}
   @media(max-width:800px){.plan-grid{grid-template-columns:1fr}.chart-row{grid-template-columns:1fr}}@media(max-width:700px){.diagnosis-item{grid-template-columns:1fr;align-items:start}.diagnosis-actions{justify-content:flex-start}.class-select{max-width:none;flex:1}}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script><script src="js/db.js"></script><script src="js/profile.js"></script><script src="js/training.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script><script src="js/security.js"></script><script src="js/db.js"></script><script src="js/profile.js"></script><script src="js/training.js"></script>
 <script>
 let allActivities=[],allLaps=[],profile={},charts={};
 const META={easy:{label:'Lugnt/Z2',badge:'badge-easy',color:'#185FA5'},long:{label:'Långpass lugnt',badge:'badge-long',color:'#1d9e75'},threshold:{label:'Tröskel/tempo',badge:'badge-threshold',color:'#ba7517'},vo2:{label:'VO2/intervall',badge:'badge-vo2',color:'#e24b4a'},progressive:{label:'Progressivt',badge:'badge-progressive',color:'#534AB7'},mixed:{label:'Blandat/oklart',badge:'badge-mixed',color:'#9a9a94'}};
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=v=>AppSecurity.escapeHtml(String(v??''));
+const validActivityId=v=>AppSecurity.isUuid(String(v||''));
 const isRun=a=>String(a.activity_type||a.sport_raw||'').toLowerCase().includes('run')||String(a.activity_type||'').toLowerCase().includes('löp');
 const dateText=iso=>iso?new Date(`${iso}T12:00:00`).toLocaleDateString('sv-SE',{day:'numeric',month:'short'}):'–';
 const pct = value => `${Math.round(value * 100)}%`;
-const fmtPaceLocal = seconds => {
-  if (!seconds || !isFinite(seconds)) return '–';
-  const total = Math.max(0, Math.round(seconds));
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-};
+const fmtPaceLocal = seconds => { if (!seconds || !isFinite(seconds)) return '–'; const total = Math.max(0, Math.round(seconds)); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; };
 
 function setConnected(ok) {
   document.getElementById('conn-dot').className = `status-dot ${ok ? 'status-ok' : 'status-err'}`;
@@ -54,6 +52,7 @@ function setConnected(ok) {
 
 function groupLaps() {
   return allLaps.reduce((map, lap) => {
+    if (!validActivityId(lap.activity_id)) return map;
     (map[lap.activity_id] || (map[lap.activity_id] = [])).push(lap);
     return map;
   }, {});
@@ -72,64 +71,31 @@ function classify(activity, laps) {
   const clean = usable(laps);
   const duration = +activity.moving_time_seconds || +activity.duration_seconds || clean.reduce((sum, lap) => sum + lap.duration_seconds, 0);
   const distance = (+activity.distance_meters || clean.reduce((sum, lap) => sum + lap.distance_meters, 0)) / 1000;
-  const profileZones = profile.hrMax && profile.hrRest ? {
-    easy: profile.hrRest + (profile.hrMax - profile.hrRest) * .70,
-    hard: profile.hrRest + (profile.hrMax - profile.hrRest) * .80
-  } : null;
+  const profileZones = profile.hrMax && profile.hrRest ? { easy: profile.hrRest + (profile.hrMax - profile.hrRest) * .70, hard: profile.hrRest + (profile.hrMax - profile.hrRest) * .80 } : null;
   const zoneSeconds = activity.hr_zone_seconds || activity.raw_data?.hr_zone_seconds || {};
-  const zoneValue = zone => Array.isArray(zoneSeconds)
-    ? (+zoneSeconds[zone - 1] || 0)
-    : (+zoneSeconds[zone] || +zoneSeconds[`zone${zone}`] || 0);
+  const zoneValue = zone => Array.isArray(zoneSeconds) ? (+zoneSeconds[zone - 1] || 0) : (+zoneSeconds[zone] || +zoneSeconds[`zone${zone}`] || 0);
   const aggregateEasy = zoneValue(1) + zoneValue(2);
   const aggregateHard = zoneValue(4) + zoneValue(5);
 
   if (clean.length < 3) {
     const hr = +activity.avg_hr || 0;
-    const key = aggregateHard > 0 && aggregateHard > duration * .18 ? 'threshold'
-      : aggregateEasy > 0 && aggregateEasy >= duration * .65 ? 'easy'
-      : profileZones && hr && hr <= profileZones.easy ? 'easy'
-      : profileZones && hr >= profileZones.hard ? 'threshold' : 'mixed';
-    return {
-      activity, duration, distance, key, confidence: 'Låg', quality: key === 'threshold',
-      easyDuration: Object.keys(zoneSeconds).length ? aggregateEasy : (key === 'easy' ? duration : 0),
-      evidence: aggregateEasy || aggregateHard
-        ? `Zonaggregat: ${Math.round(aggregateEasy / 60)} min lugnt, ${Math.round(aggregateHard / 60)} min hårt.`
-        : hr ? `Sammanfattning med ${hr} bpm; laps saknas.` : 'Saknar tillräckliga laps och pulsdata.'
-    };
+    const key = aggregateHard > 0 && aggregateHard > duration * .18 ? 'threshold' : aggregateEasy > 0 && aggregateEasy >= duration * .65 ? 'easy' : profileZones && hr && hr <= profileZones.easy ? 'easy' : profileZones && hr >= profileZones.hard ? 'threshold' : 'mixed';
+    return { activity, duration, distance, key, confidence: 'Låg', quality: key === 'threshold', easyDuration: Object.keys(zoneSeconds).length ? aggregateEasy : (key === 'easy' ? duration : 0), evidence: aggregateEasy || aggregateHard ? `Zonaggregat: ${Math.round(aggregateEasy / 60)} min lugnt, ${Math.round(aggregateHard / 60)} min hårt.` : hr ? `Sammanfattning med ${hr} bpm; laps saknas.` : 'Saknar tillräckliga laps och pulsdata.' };
   }
 
   const paces = clean.map(lap => lap.pace_sec_per_km).filter(Boolean);
   const med = paces.slice().sort((a, b) => a - b)[Math.floor(paces.length / 2)];
   const easyCeil = profileZones ? profileZones.easy + 5 : null;
-  clean.forEach(lap => {
-    let score = 0;
-    if (lap.avg_hr && easyCeil && lap.avg_hr > easyCeil) score = 1;
-    if (lap.avg_hr && profileZones && lap.avg_hr >= profileZones.hard) score = 2;
-    if (lap.pace_sec_per_km && med && lap.pace_sec_per_km < med * .88) score = Math.max(score, 2);
-    else if (lap.pace_sec_per_km && med && lap.pace_sec_per_km < med * .94) score = Math.max(score, 1);
-    lap.intensity = score;
-  });
+  clean.forEach(lap => { let score = 0; if (lap.avg_hr && easyCeil && lap.avg_hr > easyCeil) score = 1; if (lap.avg_hr && profileZones && lap.avg_hr >= profileZones.hard) score = 2; if (lap.pace_sec_per_km && med && lap.pace_sec_per_km < med * .88) score = Math.max(score, 2); else if (lap.pace_sec_per_km && med && lap.pace_sec_per_km < med * .94) score = Math.max(score, 1); lap.intensity = score; });
   const hard = clean.filter(lap => lap.intensity >= 1).reduce((sum, lap) => sum + lap.duration_seconds, 0);
   const easy = clean.filter(lap => lap.intensity === 0).reduce((sum, lap) => sum + lap.duration_seconds, 0);
   const share = duration ? hard / duration : 0;
   const blocks = [];
   let block = null;
-  clean.forEach((lap, index) => {
-    if (lap.intensity >= 1) {
-      if (!block) block = { start: index, end: index, time: 0 };
-      block.end = index;
-      block.time += lap.duration_seconds;
-    } else if (block) {
-      blocks.push(block);
-      block = null;
-    }
-  });
+  clean.forEach((lap, index) => { if (lap.intensity >= 1) { if (!block) block = { start: index, end: index, time: 0 }; block.end = index; block.time += lap.duration_seconds; } else if (block) { blocks.push(block); block = null; } });
   if (block) blocks.push(block);
   const maxBlock = Math.max(0, ...blocks.map(item => item.time));
-  const median = values => {
-    const sorted = values.slice().sort((a, b) => a - b);
-    return sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
-  };
+  const median = values => { const sorted = values.slice().sort((a, b) => a - b); return sorted.length ? sorted[Math.floor(sorted.length / 2)] : null; };
   const firstHalf = clean.slice(0, Math.ceil(clean.length / 2)).map(lap => lap.pace_sec_per_km).filter(Boolean);
   const secondHalf = clean.slice(Math.floor(clean.length / 2)).map(lap => lap.pace_sec_per_km).filter(Boolean);
   const progressive = median(firstHalf) && median(secondHalf) && median(secondHalf) < median(firstHalf) * .96 && share < .38;
@@ -148,26 +114,26 @@ function diagnostics() {
   return allActivities.filter(isRun).map(activity => {
     const diagnosis = classify(activity, byActivity[activity.id] || []);
     const override = profile.activityOverrides && profile.activityOverrides[activity.id];
-    return override && META[override]
-      ? { ...diagnosis, key: override, quality: ['threshold', 'vo2', 'progressive'].includes(override), confidence: 'Manuell', evidence: `Manuellt klassad som ${META[override].label}.` }
-      : diagnosis;
+    return override && META[override] ? { ...diagnosis, key: override, quality: ['threshold', 'vo2', 'progressive'].includes(override), confidence: 'Manuell', evidence: `Manuellt klassad som ${META[override].label}.` } : diagnosis;
   });
 }
 
 async function saveClassOverride(id, key) {
-  await TrainingProfile.save({ activityOverrides: { [id]: key || null } });
-  profile = await TrainingProfile.load();
-  render();
-  if (window.toast) toast(key ? 'Klassning sparad' : 'Automatisk klassning återställd');
+  if (!validActivityId(id) || (key && !META[key])) return;
+  try {
+    await TrainingProfile.save({ activityOverrides: { [id]: key || null } });
+    profile = await TrainingProfile.load();
+    render();
+    toast(key ? 'Klassning sparad' : 'Automatisk klassning återställd');
+  } catch (error) {
+    toast(AppSecurity.safeErrorMessage(error, 'Klassningen kunde inte sparas.'));
+  }
 }
 
 function renderEvidence(diag, comparison) {
   const periodStart = new Date(`${Training.addDays(comparison.current.from, -28)}T00:00:00`);
   const periodEnd = new Date(`${comparison.today}T12:00:00`);
-  const recent = diag.filter(d => {
-    const date = new Date(`${Training.localDate(d.activity.activity_date)}T12:00:00`);
-    return date >= periodStart && date <= periodEnd;
-  });
+  const recent = diag.filter(d => { const date = new Date(`${Training.localDate(d.activity.activity_date)}T12:00:00`); return date >= periodStart && date <= periodEnd; });
   const easy = recent.reduce((sum, diagnosis) => sum + diagnosis.easyDuration, 0);
   const total = recent.reduce((sum, diagnosis) => sum + diagnosis.duration, 0);
   const unknown = comparison.weeks.filter(week => week.coverage === 'unknown').length;
@@ -176,10 +142,7 @@ function renderEvidence(diag, comparison) {
   document.getElementById('m-volume-sub').textContent = `${comparison.current.runs} pass · ${comparison.current.unknownWeeks} okända veckor`;
   document.getElementById('m-easy').textContent = total ? pct(easy / total) : '–';
   document.getElementById('m-easy-sub').textContent = `${recent.length} pass · zonstatistik, annars uppskattning från medelpuls`;
-  document.getElementById('m-quality').textContent = diag.filter(d => {
-    const age = (comparisonToday - new Date(`${Training.localDate(d.activity.activity_date)}T12:00:00`)) / 86400000;
-    return d.quality && age >= 0 && age <= 14;
-  }).length;
+  document.getElementById('m-quality').textContent = diag.filter(d => { const age = (comparisonToday - new Date(`${Training.localDate(d.activity.activity_date)}T12:00:00`)) / 86400000; return d.quality && age >= 0 && age <= 14; }).length;
   const high = recent.filter(d => d.confidence !== 'Låg').length;
   document.getElementById('m-classified').textContent = `${high}/${recent.length}`;
   document.getElementById('m-classified-sub').textContent = 'med tillräckligt lap-underlag';
@@ -187,49 +150,39 @@ function renderEvidence(diag, comparison) {
   const notes = [
     ['Periodjämförelse', `Senaste fyra veckor: ${comparison.current.km.toFixed(1)} km; föregående fyra: ${comparison.previous.km.toFixed(1)} km.`],
     ['Passmix', recent.length ? `${recent.filter(d => d.key === 'easy' || d.key === 'long').length} lugna/långa och ${recent.filter(d => d.quality).length} kvalitetspass i urvalet.` : 'För få pass för passmix.'],
-    ['Datakvalitet', unknown ? `${unknown} veckor är okända. Importera eller bekräfta täckning innan de tolkas som vila.` : 'Alla jämförda veckor har bekräftad täckning.'],
+    ['Datakvalitet', unknown ? `${unknown} veckor är okända. Importera eller bekräfta täckning innan de tolkas som vila.` : 'Alla jämförda veckor har bekräftad datatäckning.'],
     ['Målprofil', profile.goal && profile.goal.distanceKm ? `Mål: ${profile.goal.distanceKm} km${profile.goal.targetSeconds ? ` på ${Math.round(profile.goal.targetSeconds / 60)} min` : ''}.` : 'Ingen målprofil är konfigurerad.']
   ];
-  document.getElementById('evidence-list').innerHTML = notes.map(([title, body]) => `<div class="plan-note"><div class="plan-note-title">${title}</div><div class="plan-note-body">${esc(body)}</div></div>`).join('');
+  document.getElementById('evidence-list').innerHTML = notes.map(([title, body]) => `<div class="plan-note"><div class="plan-note-title">${esc(title)}</div><div class="plan-note-body">${esc(body)}</div></div>`).join('');
 }
 
 function renderCharts(diag, comparison) {
   Object.values(charts).forEach(chart => chart.destroy());
   const windowStart = Training.addDays(comparison.today, -56);
-  const chartDiag = diag.filter(d => {
-    const date = Training.localDate(d.activity.activity_date);
-    return date >= windowStart && date <= comparison.today;
-  });
+  const chartDiag = diag.filter(d => { const date = Training.localDate(d.activity.activity_date); return date >= windowStart && date <= comparison.today; });
   const counts = {};
   chartDiag.forEach(diagnosis => { counts[diagnosis.key] = (counts[diagnosis.key] || 0) + 1; });
   const entries = Object.entries(counts);
-  charts.mix = new Chart(document.getElementById('chart-mix'), {
-    type: 'doughnut', data: { labels: entries.map(([key]) => META[key].label), datasets: [{ data: entries.map(([, value]) => value), backgroundColor: entries.map(([key]) => META[key].color), borderWidth: 0 }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
-  });
+  charts.mix = new Chart(document.getElementById('chart-mix'), { type: 'doughnut', data: { labels: entries.map(([key]) => META[key].label), datasets: [{ data: entries.map(([, value]) => value), backgroundColor: entries.map(([key]) => META[key].color), borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } } });
   const weeks = comparison.weeks.slice(-8);
   const keys = ['easy', 'long', 'threshold', 'vo2', 'progressive', 'mixed'];
-  charts.week = new Chart(document.getElementById('chart-week'), {
-    type: 'bar', data: { labels: weeks.map(week => week.date.slice(5)), datasets: keys.map(key => ({
-      label: META[key].label,
-      data: weeks.map(week => chartDiag.filter(d => Training.monday(d.activity.activity_date) === week.date && d.key === key).reduce((sum, d) => sum + d.distance, 0)),
-      backgroundColor: META[key].color
-    })) },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
-  });
+  charts.week = new Chart(document.getElementById('chart-week'), { type: 'bar', data: { labels: weeks.map(week => week.date.slice(5)), datasets: keys.map(key => ({ label: META[key].label, data: weeks.map(week => chartDiag.filter(d => Training.monday(d.activity.activity_date) === week.date && d.key === key).reduce((sum, d) => sum + d.distance, 0)), backgroundColor: META[key].color })) }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } } });
 }
 
 function renderList(items) {
   const element = document.getElementById('diagnosis-list');
   if (!items.length) { element.innerHTML = '<div class="empty">Inga löppass att analysera ännu.</div>'; return; }
   element.innerHTML = items.slice().reverse().slice(0, 18).map(diagnosis => {
+    if (!validActivityId(diagnosis.activity.id)) return '';
     const meta = META[diagnosis.key];
-    const options = Object.entries(META).map(([key, value]) => `<option value="${key}" ${diagnosis.key === key ? 'selected' : ''}>${value.label}</option>`).join('');
+    const options = Object.entries(META).map(([key, value]) => `<option value="${esc(key)}" ${diagnosis.key === key ? 'selected' : ''}>${esc(value.label)}</option>`).join('');
     const pace = Training.paceSeconds(diagnosis.activity);
     const manual = profile.activityOverrides && profile.activityOverrides[diagnosis.activity.id];
-    const autoButton = manual ? `<button class="btn btn-sm" type="button" onclick="saveClassOverride('${esc(diagnosis.activity.id)}','')">Auto</button>` : '';
-    return `<div class="activity-item diagnosis-item"><span class="class-badge ${meta.badge}">${meta.label}</span><div class="activity-main"><div class="activity-name">${dateText(Training.localDate(diagnosis.activity.activity_date))} · ${diagnosis.distance.toFixed(1)} km · ${Math.round(diagnosis.duration / 60) || '–'} min</div><div class="activity-meta">${esc(diagnosis.evidence)} Tillförlitlighet i klassningen: ${diagnosis.confidence}.</div></div><div class="activity-right"><div class="activity-dist">${diagnosis.activity.avg_hr ? diagnosis.activity.avg_hr + ' bpm' : '–'}</div><div class="activity-pace">${fmtPaceLocal(pace.seconds)}/km</div></div><div class="diagnosis-actions"><select class="class-select" aria-label="Klassning för pass ${esc(Training.localDate(diagnosis.activity.activity_date))}" onchange="saveClassOverride('${esc(diagnosis.activity.id)}', this.value)">${options}</select>${autoButton}<a class="detail-link" href="activity.html?id=${encodeURIComponent(diagnosis.activity.id)}">Detalj</a></div></div>`;
+    const averageHr = Number.isFinite(Number(diagnosis.activity.avg_hr)) ? String(Number(diagnosis.activity.avg_hr)) : '–';
+    return `<div class="activity-item diagnosis-item"><span class="class-badge ${esc(meta.badge)}">${esc(meta.label)}</span><div class="activity-main"><div class="activity-name">${esc(dateText(Training.localDate(diagnosis.activity.activity_date)))} · ${esc(diagnosis.distance.toFixed(1))} km · ${esc(Math.round(diagnosis.duration / 60) || '–')} min</div><div class="activity-meta">${esc(diagnosis.evidence)} Tillförlitlighet i klassningen: ${esc(diagnosis.confidence)}.</div></div><div class="activity-right"><div class="activity-dist">${esc(averageHr)} bpm</div><div class="activity-pace">${esc(fmtPaceLocal(pace.seconds))}/km</div></div><div class="diagnosis-actions"><select class="class-select" aria-label="Klassning för pass ${esc(Training.localDate(diagnosis.activity.activity_date))}" data-override-id="${esc(diagnosis.activity.id)}">${options}</select>${manual ? `<button class="btn btn-sm" type="button" data-auto-id="${esc(diagnosis.activity.id)}">Auto</button>` : ''}<a class="detail-link" href="activity.html?id=${encodeURIComponent(diagnosis.activity.id)}">Detalj</a></div></div>`;
   }).join('');
+  element.querySelectorAll('[data-override-id]').forEach(select => select.addEventListener('change', () => saveClassOverride(select.dataset.overrideId, select.value)));
+  element.querySelectorAll('[data-auto-id]').forEach(button => button.addEventListener('click', () => saveClassOverride(button.dataset.autoId, '')));
 }
 
 function render() {
@@ -249,11 +202,11 @@ async function init() {
   try {
     profile = await TrainingProfile.load();
     const [activities, laps] = await Promise.all([
-      dbQueryAll('activities?order=activity_date.asc,id.asc', 500),
-      dbQueryAll('laps?select=activity_id,lap_index,distance_meters,duration_seconds,avg_hr,avg_pace_sec_per_km&order=activity_id.asc,lap_index.asc', 500).catch(() => [])
+      dbQueryAll('activities?order=activity_date.asc,id.asc'),
+      dbQueryAll('laps?select=activity_id,lap_index,distance_meters,duration_seconds,avg_hr,avg_pace_sec_per_km&order=activity_id.asc,lap_index.asc').catch(() => [])
     ]);
-    allActivities = activities || [];
-    allLaps = laps || [];
+    allActivities = (activities || []).filter(activity => validActivityId(activity.id));
+    allLaps = (laps || []).filter(lap => validActivityId(lap.activity_id));
     setConnected(true);
     render();
   } catch (error) {

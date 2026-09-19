@@ -30,15 +30,17 @@ Tid med aktiv timer används före hastighetsberäknad tid och sist förfluten t
 
 ## Databas och installation
 
-För en befintlig installation behövs tilläggsmigrationerna **003, 004, 005 i den ordningen**, efter tidigare 001 och 002. Kör inga migrationer mot en okontrollerad databas. Frontend och databasändringarna är förberedda lokalt; publicering och ändring av den riktiga databasen kräver separat godkännande.
+För en befintlig installation behövs tilläggsmigrationerna **005, 006, 007 i den ordningen**, efter tidigare 001–004. Kör inga migrationer mot en okontrollerad databas. Migrationerna 005–007 är installerade i den uttryckligen godkända befintliga Supabase-miljön. Andra installationer kräver eget miljöspecifikt mandat.
 
 För en ny installation: kör `schema.sql`, därefter migrationerna i `supabase/migrations` i nummerordning. Kontrollera avsedd ägare i 001 före körning. Skapa/invitera kontot i Supabase Auth och konfigurera rätt URL och publik anon-nyckel i `js/db.js`. Anon-nyckeln är avsedd för frontend; en service-role-nyckel får aldrig användas där.
 
 - `001_owner_rls_auth.sql`: inloggning och ägarskydd för aktiviteter och detaljer.
 - `002_training_plan_logs.sql`: planloggar och deras ägarskydd.
-- `003_activity_import.sql`: gemensam atomisk import, importidentitet, dubblettskydd, timer-/total tid och sparad zonfördelning. Gamla pass med entydig match kan kompletteras; tvetydiga matchningar kräver granskning.
-- `004_plan_activity_links.sql`: koppling till faktisk aktivitet, en aktivitet per planlogg, kontroll av gemensam ägare och servergenererad monoton sparversion för konfliktkontroll.
-- `005_training_profiles.sql`: gemensam profil och versionskontroll vid sparning.
+- `003_atomic_activity_import.sql`: tidigare atomisk import, validering och hashbaserat dubblettskydd.
+- `004_monotonic_plan_sync.sql`: tidigare skydd mot föråldrade planuppdateringar.
+- `005_activity_import.sql`: gemensam atomisk import, importidentitet, dubblettskydd, timer-/total tid och sparad zonfördelning. Gamla pass med entydig match kan kompletteras; tvetydiga matchningar kräver granskning.
+- `006_plan_activity_links.sql`: koppling till faktisk aktivitet, en aktivitet per planlogg, kontroll av gemensam ägare och servergenererad monoton sparversion för konfliktkontroll.
+- `007_training_profiles.sql`: gemensam profil och versionskontroll vid sparning.
 
 ### Driftsättningsordning vid godkänt mandat
 
@@ -66,17 +68,18 @@ PGLITE_PATH=/absolute/path/to/node_modules/@electric-sql/pglite node --test test
 
 Testet använder en disponibel databas och syntetiska konton. Det kontrollerar migrationer, ägarskydd, felaktiga data, atomisk import och konflikter. Det ersätter inte verifiering av Supabase Auth och PostgREST i avsedd driftmiljö.
 
-## Sparat arbetsläge – lokalt färdigt 2026-09-19
+## Sparat arbetsläge – publicering pågår 2026-09-19
 
-Återupptaget på användarens begäran. Den lokala implementationen och slutkontrollerna är klara. Inget har publicerats eller körts mot produktionsdatabasen.
+Användaren har uttryckligen godkänt säkerhetskopia, uppdatering av ansluten Supabase-databas och publicering på befintliga GitHub Pages, inklusive efterkontroll och återställning av tidigare frontend vid fel. Mandatet gäller fortsatt; fråga inte om samma godkännande igen.
 
-- **Beställt resultat:** tydlig träningsutveckling och nuläge, målbaserade planförslag, enkel Garmin-import och uttryckligen bibehållen enkel extrapolerad prognos. Befintlig statisk webbplats och Supabase behålls.
-- **Git:** branch `feature/sub40-training-plan`, HEAD `b0540ab85cfa3bf4ef185e41fa3785e1c94e5f08`. Ändringar och nya filer finns i arbetskatalogen utan commit/push. Bevara dem. Inget nytt PR skapades.
-- **Levererat lokalt:** översikt, jämförbara pass och prognos, mål/profil, aktuell veckoplan och koppling till faktiska pass, säkrare FIT/ZIP-import med originalarkiv, timer/total tid och sparade pulszoner. Migrationerna 003–005 är förberedda lokalt.
-- **Slutfix:** planloggar får en strikt stigande servertidsstämpel i migration 004. Klienten jämför hela servervärdet utan att tappa mikrosekunder. Samtidiga ändringar ger konflikt i stället för tyst överskrivning. Planbyte väntar på pågående sparning och behåller konto/block. En andra lokal ändring under synkning bevaras som väntande och visas inte som permanent pågående synkning.
-- **Verifierat:** 41/41 vanliga tester och 10/10 PostgreSQL/PGlite-kontroller passerar; inga överhoppade tester. `git diff --check` är utan anmärkning. Oberoende granskning godkände den sista konfliktfixen. Det tidigare hängande planbytestestet är rättat och har fem sekunders tidsgräns.
-- **Webbläsarkontroll:** syntetisk översikt och bibehållen prognos, synlig historikväljare, skapa/uppdatera check-in, omladdning och växling mellan aktuell plan och arkiv fungerade; inga konsolfel i slutkontrollen. Tidigare under samma uppdrag verifierades även profil, aktivitetsdetaljer, klassning, ZIP-import och återimport utan dubblett. Ingen riktig träningsdata användes.
-- **Workers:** import, utvecklingsanalys, plan och oberoende review är avslutade; inga kvarvarande blockerande workers. Resultaten finns lokalt i projektet och i samma uppgift.
-- **Förhandsvisning:** `http://127.0.0.1:8903/index.html` visar enbart syntetiska data. Starta vid behov med `node tests/preview-server.cjs 8903`; testkontots molndata återställs när servern startar om. Testmotorn finns för närvarande i `/private/tmp/training-dashboard-test-runtime/node_modules/@electric-sql/pglite`; kontrollera sökvägen eftersom temporära filer kan försvinna.
-- **Mandat och nästa steg:** lokal implementation/verifiering är godkänd och klar. Produktion, riktig databas, merge, push och publicering kräver ett separat uttryckligt godkännande. Nästa steg är ett samlat beslut om backup, migrationerna 003–005, publicering, driftkontroll och återställning av tidigare frontend vid fel enligt driftsättningsordningen ovan. Inga nya tjänster eller abonnemang behövs.
-- **Tidigare verifierat publiceringsmål:** GitHub `rasmusahlin/traning-dashboard`, Pages från `main` och `/`, webbplats `https://rasmusahlin.github.io/traning-dashboard/`; anslutet Supabase-projekt `mpmtvydpiihfltldaxkt`. Verifiera mål och åtkomst igen inför godkända driftåtgärder. Integrationsproven ersätter inte kontroll av verklig Supabase Auth/PostgREST i rätt miljö.
+- Mål: GitHub `rasmusahlin/traning-dashboard`, Pages från `main` och `/`, `https://rasmusahlin.github.io/traning-dashboard/`; Supabase `mpmtvydpiihfltldaxkt` (health Project i organisation Rasmus).
+- Före publicering verifierades remote main `a1664e26320a490fd0951aea7f330ecd71929397`. Den innehåller säkerhetsförbättringar och tidigare migrationer 003–004 som saknades i den gamla lokala basen. Dessa bevaras och förenas med nyheterna före release.
+- Arbetsgren `codex/training-insights-release`; lokal checkpoint `b6ee789` bevarar de godkända funktionerna före sammanfogningen. Sammanfogningen med origin/main är klar. Frontend är färdig för publicering på godkänt mål.
+- Supabase återupptogs från pausat läge. Privat gzip-backup hämtades från projektets pausbackup och integritetskontrollerades; 4 871 598 byte komprimerat, SHA-256 och metadata finns i den Git-ignorerade `.private-backups/manifest.json`. Backup får aldrig publiceras.
+- Migrationerna 005, 006 och 007 kördes framgångsrikt via Supabase SQL Editor 2026-09-19. CLI-inloggning fungerar för projektlistning men db query har en versions-/profilkonflikt; ingen ny inloggning behövs.
+- Efterkontroll: 260 aktiviteter, 2 125 varv, 1 875 km-splits, 143 659 mätpunkter och 8 planloggar, oförändrat från före uppdatering. Profil-RLS är aktivt; anon saknar rätt att köra nya import-/profilfunktioner och plan-RPC.
+- Transaktionstest i rätt databas verifierade syntetisk import, dubblettskydd, avvisad negativ distans, profilrevision/konfliktskydd, planlänk och kontoavskiljning. Hela testtransaktionen återställdes; inga testdata behölls.
+- Efter sammanfogning och exportfixar passerade 67 vanliga tester och 12 PostgreSQL-tester. Oberoende granskning accepterade auth/rendering/SQL och de två exportfixarna. Dess sista fynd om historiska föreslagna veckor är rättat med regression för export/återimport och negativa datumtester. Inga implementation-workers återstår.
+- Lokal webbläsarkontroll visar översikt, enkel extrapolerad prognos, aktuell veckoplan och sparad check-in. Mobilvyn och ZIP/FIT-import till testkontot kontrollerade utan konsolfel. Förhandsvisningen använder bara syntetiska data.
+- Separat befintlig behörighetsfråga utanför appens egna tabeller väntar på användarens beslut. Detaljer finns i den pågående uppgiften, inte i det offentliga underlaget. Ingen ändring av det separata flödet är gjord.
+- Nästa: skapa PR och publicera på godkänt Pages-mål; verifiera publicerad version och spara slutligt läge. Hantera det separata behörighetsflödet bara efter användarens beslut.

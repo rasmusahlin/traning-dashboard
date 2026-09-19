@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://mpmtvydpiihfltldaxkt.supabase.co; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Utveckling – Träningsdashboard</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -73,6 +74,7 @@
   @media (max-width:800px){.forecast-grid{grid-template-columns:1fr}.chart-row{grid-template-columns:1fr}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="js/security.js"></script>
 <script src="js/db.js"></script>
 <script src="js/profile.js"></script>
 <script src="js/training.js"></script>
@@ -81,7 +83,8 @@ let allActivities = [];
 let profile = {};
 let charts = {};
 
-const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc = value => AppSecurity.escapeHtml(String(value ?? ''));
+const validActivityId = value => AppSecurity.isUuid(String(value || ''));
 const dateText = iso => iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('sv-SE',{day:'numeric',month:'short',year:'numeric'}) : '–';
 const fmtPaceLocal = seconds => { if (!seconds || !isFinite(seconds)) return '–'; const total = Math.max(0, Math.round(seconds)); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; };
 const isRun = a => String(a.activity_type || a.sport_raw || '').toLowerCase().includes('run') || String(a.activity_type || '').toLowerCase().includes('löp');
@@ -127,11 +130,11 @@ function renderComparable(runs){
   const result=Training.comparableRuns(runs,profile);
   document.getElementById('comparable-status').textContent=`${result.runs.length} matchade · ${result.status==='ok'?'tillräckligt för beskrivning':result.status==='stale'?'äldre underlag':'tunt underlag'}`;
   if(!result.runs.length){document.getElementById('comparable-content').innerHTML='<p class="small-note">Inga matchande lugna pass. Tagga pass som lugna i aktivitetsdetaljen eller komplettera pulsdata.</p>';return;}
-  const ordered=result.runs.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
-  const meanPace=rows=>{const values=rows.map(r=>r.paceSeconds).filter(Boolean);return values.length?values.reduce((sum,v)=>sum+v,0)/values.length:null;};
+  const ordered=result.runs.slice().sort((a,b)=>b.date.localeCompare(a.date)||String(b.id).localeCompare(String(a.id)));
+  const average=list=>list.reduce((s,r)=>s+r.paceSeconds,0)/list.length;
   const latest=ordered.slice(0,3), previous=ordered.slice(3,6);
-  const summary=`Senaste ${latest.length}: ${fmtPaceLocal(meanPace(latest))}/km · föregående ${previous.length}: ${previous.length?fmtPaceLocal(meanPace(previous))+'/km':'saknas'} · råa passvärden`;
-  const table=`<div class="table-wrap"><table><thead><tr><th>Datum</th><th>Yta</th><th>Rutt</th><th>Pulsband</th><th>Varaktighet</th><th>Tempo</th><th>Källa</th></tr></thead><tbody>${ordered.map(r=>`<tr><td>${dateText(r.date)}</td><td>${esc(surfaceLabel(r.surface))}</td><td>${esc(r.route||'okänd')}</td><td>${esc(hrBandLabel(r.hrBand))}</td><td>${r.duration?Math.round(r.duration/60)+' min':'–'}</td><td>${fmtPaceLocal(r.paceSeconds)}/km</td><td>${r.id?`<a class="source-link" href="activity.html?id=${encodeURIComponent(r.id)}">pass</a>`:'–'}</td></tr>`).join('')}</tbody></table></div>`;
+  const summary=`Senaste ${latest.length}: ${fmtPaceLocal(average(latest))}/km · föregående ${previous.length}: ${previous.length?fmtPaceLocal(average(previous))+'/km':'saknas'} · råa passvärden`;
+  const table=`<div class="table-wrap"><table><thead><tr><th>Datum</th><th>Yta</th><th>Rutt</th><th>Pulsband</th><th>Varaktighet</th><th>Tempo</th><th>Källa</th></tr></thead><tbody>${ordered.map(r=>`<tr><td>${dateText(r.date)}</td><td>${esc(surfaceLabel(r.surface))}</td><td>${esc(r.route||'okänd')}</td><td>${esc(hrBandLabel(r.hrBand))}</td><td>${r.duration?Math.round(r.duration/60)+' min':'–'}</td><td>${fmtPaceLocal(r.paceSeconds)}/km</td><td>${validActivityId(r.id)?`<a class="source-link" href="activity.html?id=${encodeURIComponent(r.id)}">pass</a>`:'–'}</td></tr>`).join('')}</tbody></table></div>`;
   document.getElementById('comparable-content').innerHTML=`<p><strong>${summary}</strong></p><details><summary>Visa alla matchade pass (${ordered.length})</summary>${table}</details><p class="small-note">${esc(result.limitations)} Matchningen är gruppvis; yta, rutt och varaktighet med okänd källa blandas inte med kända värden.</p>`;
 }
 
@@ -160,7 +163,7 @@ function renderForecast(runs){
 async function init(){
   try{
     profile=await TrainingProfile.load();
-    allActivities=await dbQueryAll('activities?order=activity_date.asc,id.asc',500);
+    allActivities=(await dbQueryAll('activities?order=activity_date.asc,id.asc')).filter(activity=>validActivityId(activity.id));
     const today=Training.localDate(new Date());
     const runs=allActivities.filter(isRun).filter(activity=>Training.localDate(activity.activity_date)<=today);
     runs.coverage={start:profile.coverageStart,through:profile.coverageThrough,confirmed:Boolean(profile.coverageStart&&profile.coverageThrough)};

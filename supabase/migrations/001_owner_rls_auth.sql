@@ -7,7 +7,8 @@
 --
 -- Before running:
 --   1. In Supabase, create or invite the user account that should own the data.
---   2. Confirm that the email below matches that account.
+--   2. Copy this migration into the SQL editor and replace the placeholder
+--      below there. Never commit the real owner email to this repository.
 --   3. Run this in Supabase SQL Editor.
 --   4. Update the frontend to sign in with Supabase Auth before enabling this
 --      on the live site. Without Auth UI, the current app will no longer see
@@ -18,11 +19,16 @@ begin;
 do $$
 declare
   owner_id uuid;
+  owner_email text := 'REPLACE_WITH_OWNER_EMAIL@example.invalid';
 begin
+  if owner_email = 'REPLACE_WITH_OWNER_EMAIL@example.invalid' then
+    raise exception 'Replace the owner email placeholder in your private SQL editor copy before running.';
+  end if;
+
   select id
     into owner_id
     from auth.users
-   where lower(email) = lower('rasmus.ahlin@gmail.com')
+   where lower(email) = lower(owner_email)
    limit 1;
 
   if owner_id is null then

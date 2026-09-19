@@ -8,6 +8,11 @@ const root = path.resolve(__dirname, '..');
 const port = Number(process.argv[2] || 8903);
 const origin = `http://127.0.0.1:${port}`;
 const user = '10000000-0000-4000-8000-000000000001';
+const syntheticSession = {
+  access_token: 'synthetic-only',
+  expires_at: Date.now() + 86400000,
+  user: { id: user, email: 'synthetic@example.invalid' }
+};
 const today = Training.localDate(new Date());
 const id = n => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const tables = {activities:[],laps:[],km_splits:[],time_series:[],training_plan_logs:[]};
@@ -104,12 +109,20 @@ const server=http.createServer(async(req,res)=>{
     if(url.pathname.startsWith('/api/auth/'))return respond(res,200,{});
     const requested=path.resolve(root,'.'+decodeURIComponent(url.pathname));
     if(!requested.startsWith(root+path.sep)&&requested!==root)return respond(res,403,{});
+    if(path.relative(root,requested).split(path.sep).some(part=>part.startsWith('.')))return respond(res,403,{});
     const file=fs.existsSync(requested)&&fs.statSync(requested).isDirectory()?path.join(requested,'index.html'):requested;
     if(!fs.existsSync(file))return respond(res,404,{});
     let data=fs.readFileSync(file);
     const ext=path.extname(file),types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.fit':'application/octet-stream','.zip':'application/zip'};
-    if(file===path.join(root,'js/db.js'))data=data.toString().replace(/const SUPA_URL = .*?;/,`const SUPA_URL = '${origin}/api';`).replace('let authSession = loadAuthSession();',`let authSession = ${JSON.stringify({access_token:'synthetic-only',expires_at:Date.now()+86400000,user:{id:user,email:'synthetic@example.invalid'}})}; saveAuthSession(authSession);`);
-    if(ext==='.html')data=data.toString().replace('<body>','<body><div style="background:#f4e8bb;color:#493900;padding:7px 20px;text-align:center;font:13px system-ui">Lokal förhandsvisning · enbart syntetiska testdata</div>');
+    if(file===path.join(root,'js/db.js'))data=data.toString()
+      .replace(/const SUPA_URL = .*?;/,`const SUPA_URL = '${origin}/api';`)
+      .replace('let authSession = loadAuthSession();',`sessionStorage.setItem(AUTH_STORAGE_KEY, ${JSON.stringify(JSON.stringify(syntheticSession))});\nlet authSession = loadAuthSession();`);
+    if(ext==='.html') {
+      let html=data.toString();
+      if(!/src=["'][^"']*js\/security\.js["']/i.test(html)) html=html.replace('</head>','<script src="/js/security.js"></script></head>');
+      html=html.replace(/connect-src\s+[^;]+(?=;)/i,`connect-src 'self' ${origin}`);
+      data=html.replace('<body>','<body><div style="background:#f4e8bb;color:#493900;padding:7px 20px;text-align:center;font:13px system-ui">Lokal förhandsvisning · enbart syntetiska testdata</div>');
+    }
     res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-store'});res.end(data);
   }catch(error){respond(res,500,{message:error.message});}
 });

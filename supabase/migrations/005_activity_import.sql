@@ -1,5 +1,5 @@
 -- Activity import contract.
--- Apply after schema.sql, 001_owner_rls_auth.sql and 002_training_plan_logs.sql.
+-- Apply after schema.sql and migrations 001–004.
 -- This migration is additive and is intentionally not executed by the app.
 
 begin;
@@ -10,13 +10,13 @@ begin
      or to_regclass('public.laps') is null
      or to_regclass('public.km_splits') is null
      or to_regclass('public.time_series') is null then
-    raise exception 'Migration 003 requires schema.sql tables (activities, laps, km_splits and time_series).';
+    raise exception 'Migration 005 requires schema.sql tables (activities, laps, km_splits and time_series).';
   end if;
   if not exists (
     select 1 from information_schema.columns
      where table_schema = 'public' and table_name = 'activities' and column_name = 'user_id'
   ) then
-    raise exception 'Migration 003 requires migration 001_owner_rls_auth.sql; refusing an unowned import table.';
+    raise exception 'Migration 005 requires migration 001_owner_rls_auth.sql; refusing an unowned import table.';
   end if;
 end $$;
 
@@ -46,9 +46,20 @@ alter table public.time_series
   add column if not exists elapsed_seconds numeric,
   add column if not exists timer_seconds numeric;
 
-create unique index if not exists activities_user_source_hash_idx
-  on public.activities(user_id, source_hash)
-  where source_hash is not null;
+-- 003_atomic_activity_import.sql already owns this partial unique index.
+-- Keep one canonical definition so rollout and rollback do not race two names.
+
+do $$
+begin
+  -- 003_atomic_activity_import.sql introduced the narrow running/strength/
+  -- hiking check.  The FIT parser also preserves cycling, swimming and
+  -- unknown Garmin sports, so expand the same constraint before imports can
+  -- write those supported values.  NOT VALID keeps existing historical rows
+  -- readable while enforcing the expanded set for new and changed rows.
+  alter table public.activities drop constraint if exists activities_type_check;
+  alter table public.activities add constraint activities_type_check
+    check (activity_type in ('running', 'strength', 'hiking', 'cycling', 'swimming', 'other')) not valid;
+end $$;
 
 create unique index if not exists activities_user_source_identity_idx
   on public.activities(user_id, source_identity)
@@ -316,7 +327,7 @@ exception when unique_violation then
 end;
 $$;
 
-revoke all on function public.import_activity_atomic(jsonb, jsonb, jsonb, jsonb) from public;
+revoke all on function public.import_activity_atomic(jsonb, jsonb, jsonb, jsonb) from public, anon;
 grant execute on function public.import_activity_atomic(jsonb, jsonb, jsonb, jsonb) to authenticated;
 
 commit;

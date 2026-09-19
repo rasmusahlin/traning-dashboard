@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://mpmtvydpiihfltldaxkt.supabase.co; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Pass – Träningsdashboard</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -23,7 +24,7 @@
 
 <div class="container">
   <div style="padding-top:1.5rem">
-    <a class="back-btn" onclick="history.back()">← Tillbaka</a>
+    <a class="back-btn" href="index.html">← Till översikten</a>
   </div>
 
   <div id="main-content">
@@ -34,6 +35,8 @@
 <div id="toast" class="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="js/security.js"></script>
+<script src="js/data-utils.js"></script>
 <script src="js/db.js"></script>
 <script src="js/profile.js"></script>
 <script src="js/training.js"></script>
@@ -43,22 +46,32 @@ let currentActivity = null;
 const actId = new URLSearchParams(location.search).get('id');
 
 async function init() {
-  if (!/^[0-9a-f-]{36}$/i.test(actId || '')) { document.getElementById('main-content').innerHTML = '<div class="empty">Inget giltigt pass-ID angivet.</div>'; return; }
+  if (!actId) { renderEmpty('Inget pass-ID angivet.'); return; }
+  if (!AppSecurity.isUuid(actId)) { renderEmpty('Ogiltigt pass-ID.'); return; }
   try {
     await TrainingProfile.load();
+    const idFilter = AppSecurity.postgrestUuidFilter('id', actId);
+    const activityFilter = AppSecurity.postgrestUuidFilter('activity_id', actId);
     const [acts, laps, splits] = await Promise.all([
-      dbQuery(`activities?id=eq.${actId}`),
-      dbQueryAll(`laps?activity_id=eq.${actId}&order=lap_index.asc,id.asc`),
-      dbQueryAll(`km_splits?activity_id=eq.${actId}&order=km.asc,id.asc`)
+      dbQuery(`activities?${idFilter}`),
+      dbQueryAll(`laps?${activityFilter}&order=lap_index.asc,id.asc`),
+      dbQueryAll(`km_splits?${activityFilter}&order=km.asc,id.asc`)
     ]);
     const act = acts?.[0];
-    if (!act) { document.getElementById('main-content').innerHTML = '<div class="empty">Passet hittades inte.</div>'; return; }
+    if (!act) { renderEmpty('Passet hittades inte.'); return; }
     currentActivity = act;
     render(act, laps || [], splits || []);
     renderActivityTags(act);
   } catch(e) {
-    document.getElementById('main-content').innerHTML = `<div class="empty">Fel: ${escapeHtml(e.message)}</div>`;
+    renderEmpty('Fel: ' + AppSecurity.safeErrorMessage(e));
   }
+}
+
+function renderEmpty(message) {
+  const empty = document.createElement('div');
+  empty.className = 'empty';
+  empty.textContent = message;
+  document.getElementById('main-content').replaceChildren(empty);
 }
 
 function render(act, laps, splits) {
@@ -69,10 +82,10 @@ function render(act, laps, splits) {
   document.getElementById('main-content').innerHTML = `
     <div class="page-header">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-        <div class="activity-dot ${typeDotClass(act.activity_type)}" style="width:40px;height:40px;font-size:12px">${typeDot(act.activity_type)}</div>
+        <div class="activity-dot ${typeDotClass(act.activity_type)}" style="width:40px;height:40px;font-size:12px">${escapeHtml(typeDot(act.activity_type))}</div>
         <div>
-          <h1 style="font-size:20px;font-weight:500">${typeLabel(act.activity_type)}</h1>
-          <p style="font-size:14px;color:var(--text2)">${fmtDate(act.activity_date)}</p>
+          <h1 style="font-size:20px;font-weight:500">${escapeHtml(typeLabel(act.activity_type))}</h1>
+          <p style="font-size:14px;color:var(--text2)">${escapeHtml(fmtDate(act.activity_date))}</p>
         </div>
       </div>
     </div>
@@ -161,10 +174,10 @@ function render(act, laps, splits) {
   `;
 
   // Render zone bars if HR data exists
-  if (act.avg_hr) renderZoneBars(act);
+  if (act.avg_hr) renderZoneBars(act, laps, splits, []);
 
   // Load time series for charts
-  loadTimeSeries(act.id, splits);
+  loadTimeSeries(act.id, splits, act, laps);
 }
 
 function renderSplitsTable(splits) {
@@ -253,12 +266,13 @@ function renderActivityTags(act) {
       }
       const type = document.getElementById('activity-type-edit').value;
       if (type !== act.activity_type) {
-        await dbQuery(`activities?id=eq.${encodeURIComponent(act.id)}`, { method: 'PATCH', body: JSON.stringify({ activity_type: type }) });
+        const activityFilter = AppSecurity.postgrestUuidFilter('id', act.id);
+        await dbQuery(`activities?${activityFilter}`, { method: 'PATCH', body: JSON.stringify({ activity_type: type }) });
         act.activity_type = type;
       }
       const result = await TrainingProfile.save({ activityTags: { [act.id]: next } });
       message.textContent = result.status + ' Öppna passet igen om du ändrade aktivitetstyp.';
-    } catch (error) { message.textContent = error.message; }
+    } catch (error) { message.textContent = AppSecurity.safeErrorMessage(error); }
   });
 }
 
@@ -288,10 +302,12 @@ function renderZoneBars(act) {
 }
 function escValue(value) { return escapeHtml(String(value)); }
 
-async function loadTimeSeries(actId, splits) {
+async function loadTimeSeries(actId, splits, act, laps) {
   try {
-    const ts = await dbQueryAll(`time_series?activity_id=eq.${actId}&order=t.asc,id.asc`);
+    const filter = AppSecurity.postgrestUuidFilter('activity_id', actId);
+    const ts = await dbQueryAll(`time_series?${filter}&order=t.asc,id.asc`);
     if (ts && ts.length) renderTimeSeriesCharts(ts, splits);
+    if (ts && ts.length) renderZoneBars(act, laps, splits, ts);
   } catch(e) { console.log('No time series data', e); }
 }
 

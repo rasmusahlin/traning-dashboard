@@ -16,9 +16,9 @@ create table if not exists public.training_plan_logs (
   sleep_quality integer check (sleep_quality between 1 and 5),
   stress integer check (stress between 1 and 5),
   energy integer check (energy between 1 and 5),
-  actual_distance_km numeric,
-  actual_duration_minutes numeric,
-  notes text,
+  actual_distance_km numeric check (actual_distance_km between 0 and 1000),
+  actual_duration_minutes numeric check (actual_duration_minutes between 0 and 10080),
+  notes text check (char_length(notes) <= 4000),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -29,10 +29,27 @@ begin
     select 1
       from pg_constraint
      where conname = 'training_plan_logs_user_block_day_key'
+       and conrelid = 'public.training_plan_logs'::regclass
   ) then
     alter table public.training_plan_logs
       add constraint training_plan_logs_user_block_day_key
       unique (user_id, plan_block_id, plan_day_id);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'training_plan_logs_values_check'
+       and conrelid = 'public.training_plan_logs'::regclass
+  ) then
+    alter table public.training_plan_logs
+      add constraint training_plan_logs_values_check check (
+        (actual_distance_km is null or actual_distance_km between 0 and 1000) and
+        (actual_duration_minutes is null or actual_duration_minutes between 0 and 10080) and
+        (notes is null or char_length(notes) <= 4000)
+      ) not valid;
   end if;
 end $$;
 
@@ -41,6 +58,7 @@ create index if not exists idx_training_plan_logs_user_date
 
 alter table public.training_plan_logs enable row level security;
 
+revoke all on table public.training_plan_logs from public, anon;
 grant select, insert, update, delete on table public.training_plan_logs to authenticated;
 
 drop policy if exists "training_plan_logs_select_own" on public.training_plan_logs;

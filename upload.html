@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://mpmtvydpiihfltldaxkt.supabase.co; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>Ladda upp – Träningsdashboard</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -62,23 +63,23 @@
   <div class="card">
     <div class="card-header"><span class="card-title">Manuell inmatning</span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Datum</label><input type="date" id="f-date" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Typ</label>
+      <div><label for="f-date" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Datum</label><input type="date" id="f-date" style="width:100%"></div>
+      <div><label for="f-type" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Typ</label>
         <select id="f-type" style="width:100%;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px">
           <option value="running">Löpning</option>
           <option value="strength">Styrketräning</option>
           <option value="hiking">Vandring</option>
         </select>
       </div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Distans (km)</label><input type="number" id="f-dist" step="0.01" placeholder="0.00" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Tid (mm:ss eller minuter)</label><input type="text" id="f-dur" placeholder="45:30" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Snitt-HR (bpm)</label><input type="number" id="f-hr" placeholder="150" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Max-HR (bpm)</label><input type="number" id="f-maxhr" placeholder="175" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Kadens (spm)</label><input type="number" id="f-cad" placeholder="170" style="width:100%"></div>
-      <div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Höjdmeter (m)</label><input type="number" id="f-elev" placeholder="0" style="width:100%"></div>
+      <div><label for="f-dist" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Distans (km)</label><input type="number" id="f-dist" min="0" max="1000" step="0.01" placeholder="0.00" style="width:100%"></div>
+      <div><label for="f-dur" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Tid (mm:ss eller minuter)</label><input type="text" id="f-dur" inputmode="decimal" placeholder="45:30" style="width:100%"></div>
+      <div><label for="f-hr" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Snitt-HR (bpm)</label><input type="number" id="f-hr" min="30" max="240" placeholder="150" style="width:100%"></div>
+      <div><label for="f-maxhr" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Max-HR (bpm)</label><input type="number" id="f-maxhr" min="30" max="240" placeholder="175" style="width:100%"></div>
+      <div><label for="f-cad" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Kadens (spm)</label><input type="number" id="f-cad" min="1" max="300" placeholder="170" style="width:100%"></div>
+      <div><label for="f-elev" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Höjdmeter (m)</label><input type="number" id="f-elev" min="0" max="20000" placeholder="0" style="width:100%"></div>
     </div>
-    <div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Notat</label>
-      <textarea id="f-notes" placeholder="Hur kändes passet?" style="width:100%;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px;min-height:60px;resize:vertical"></textarea>
+    <div style="margin-bottom:12px"><label for="f-notes" style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">Notat</label>
+      <textarea id="f-notes" maxlength="2000" placeholder="Hur kändes passet?" style="width:100%;padding:8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px;min-height:60px;resize:vertical"></textarea>
     </div>
     <button class="btn btn-primary" onclick="saveManual()">Spara pass</button>
     <span id="manual-status" style="font-size:13px;color:var(--text2);margin-left:8px"></span>
@@ -87,6 +88,8 @@
 
 <div id="toast" class="toast"></div>
 
+<script src="js/security.js"></script>
+<script src="js/data-utils.js"></script>
 <script src="js/db.js"></script>
 <script src="js/profile.js"></script>
 <script src="js/fitparser-bundle.min.js"></script>
@@ -96,6 +99,12 @@
 document.getElementById('f-date').value = FitImport.localDateString(new Date());
 
 const dz = document.getElementById('drop-zone');
+dz.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    document.getElementById('fit-input').click();
+  }
+});
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
 dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
 dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); handleFiles(e.dataTransfer.files); });
@@ -107,10 +116,12 @@ function avg(arr) { return arr.length ? Math.round(arr.reduce(function(a,b){retu
 
 // Canonical parser; no upload-specific FIT calculations are kept in this page.
 var parseFitFile = FitImport.parseFitFile;
+var MAX_FIT_FILE_BYTES = 50 * 1024 * 1024;
+var MAX_BATCH_FILES = 100;
 
 // ── Batch upload state ─────────────────────────────────────────────────────
 var batchQueue = [];
-var batchResults = { ok:0, skip:0, errors:[] };
+var batchResults = { ok:0, duplicate:0, failed:0, errors:[] };
 var archiveDbPromise = null;
 
 function readBytes(file) {
@@ -131,7 +142,8 @@ async function sha256Hex(bytes) {
 
 function archiveOwnerKey() {
   try {
-    var session = JSON.parse(localStorage.getItem('training_dashboard_auth_session') || 'null');
+    var raw = sessionStorage.getItem('training_dashboard_auth_session') || localStorage.getItem('training_dashboard_auth_session');
+    var session = JSON.parse(raw || 'null');
     if (session && session.user && session.user.id) return String(session.user.id);
   } catch (e) {}
   throw new Error('Logga in innan lokala original sparas eller exporteras.');
@@ -197,7 +209,15 @@ function parserOptions() {
 async function expandInputFiles(files) {
   var items = [];
   for (var i = 0; i < files.length; i++) {
-    var file = files[i], name = file.name || 'activity.fit', bytes = await readBytes(file);
+    var file = files[i], name = file.name || 'activity.fit';
+    if (!/\.(fit|zip)$/i.test(name)) throw new Error('Endast FIT- eller ZIP-filer kan importeras.');
+    if (Number.isFinite(file.size) && (file.size <= 0 || file.size > MAX_FIT_FILE_BYTES)) {
+      throw new Error('Filen måste vara större än 0 byte och högst 50 MB.');
+    }
+    var bytes = await readBytes(file);
+    if (!bytes.length || bytes.length > MAX_FIT_FILE_BYTES) {
+      throw new Error('Filen måste vara större än 0 byte och högst 50 MB.');
+    }
     if (name.toLowerCase().endsWith('.zip')) {
       var nested = await ZipReader.readFitFiles(bytes);
       nested.forEach(function (entry) { items.push({ name: entry.name, bytes: entry.bytes }); });
@@ -206,6 +226,7 @@ async function expandInputFiles(files) {
     }
   }
   if (!items.length) throw new Error('Inga FIT-filer hittades i urvalet.');
+  if (items.length > MAX_BATCH_FILES) throw new Error('Välj högst ' + MAX_BATCH_FILES + ' FIT-filer åt gången.');
   return items;
 }
 
@@ -215,9 +236,30 @@ async function parseQueueItem(item) {
   return parsed;
 }
 
+function renderBatchProgress(container, label, percent, color) {
+  var title = document.createElement('div');
+  title.style.marginBottom = '8px';
+  title.textContent = label;
+  var track = document.createElement('div');
+  track.style.cssText = 'background:var(--surface2);border-radius:4px;height:6px;width:100%';
+  var fill = document.createElement('div');
+  fill.style.cssText = 'height:6px;border-radius:4px;transition:width 0.2s';
+  fill.style.background = color;
+  fill.style.width = Math.max(0, Math.min(100, Number(percent) || 0)) + '%';
+  track.appendChild(fill);
+  container.replaceChildren(title, track);
+}
+
 async function handleFiles(files) {
   if (!files || !files.length) return;
-  var state = document.getElementById('upload-state');
+  if (files.length > MAX_BATCH_FILES) {
+    toast('Välj högst ' + MAX_BATCH_FILES + ' FIT-filer åt gången.');
+    return;
+  }
+  batchQueue = Array.from(files);
+  batchResults = { ok:0, duplicate:0, failed:0, errors:[] };
+
+  var state   = document.getElementById('upload-state');
   var actions = document.getElementById('upload-actions');
   state.style.display = 'block';
   actions.style.display = 'none';
@@ -225,7 +267,7 @@ async function handleFiles(files) {
   msg.textContent = 'Läser FIT-filer...';
   try { batchQueue = await expandInputFiles(Array.from(files)); }
   catch (e) { msg.textContent = 'Fel: ' + e.message; return; }
-  batchResults = { ok:0, skip:0, errors:[] };
+  batchResults = { ok:0, duplicate:0, failed:0, errors:[] };
   msg.textContent = batchQueue.length + ' fil(er) valda...';
 
   if (batchQueue.length === 1) {
@@ -288,9 +330,13 @@ async function saveSingle() {
   btn.textContent = 'Sparar...'; btn.disabled = true;
   try {
     var result = await saveOneParsed(pending.parsed, pending.item);
-    if (result.status === 'duplicate') { toast('Passet fanns redan – originalet sparades lokalt.'); btn.disabled = false; return; }
-    toast('Pass sparat!');
-    setTimeout(function() { location.href = 'index.html'; }, 1000);
+    if (result.status === 'duplicate') {
+      toast('Passet finns redan och importerades inte igen.');
+      setTimeout(function() { location.href = 'activity.html?id=' + encodeURIComponent(result.activity_id); }, 1000);
+    } else {
+      toast('Pass sparat!');
+      setTimeout(function() { location.href = 'index.html'; }, 1000);
+    }
   } catch(e) {
     toast('Fel: ' + e.message); btn.textContent = 'Spara till dashboard'; btn.disabled = false;
   }
@@ -304,36 +350,41 @@ async function runBatchImport() {
   for (var i = 0; i < batchQueue.length; i++) {
     var file = batchQueue[i];
     var pct  = Math.round(((i) / total) * 100);
-    msg.innerHTML =
-      '<div style="margin-bottom:8px">Importerar ' + (i+1) + ' / ' + total + ' &nbsp;·&nbsp; ' + escapeHtml(file.name) + '</div>' +
-      '<div style="background:var(--surface2);border-radius:4px;height:6px;width:100%">' +
-        '<div style="background:#185FA5;height:6px;border-radius:4px;width:' + pct + '%;transition:width 0.2s"></div>' +
-      '</div>';
+    renderBatchProgress(msg, 'Importerar ' + (i+1) + ' / ' + total + ' · ' + file.name, pct, '#185FA5');
     try {
       var pd = await parseQueueItem(file);
       var result = await saveOneParsed(pd, file);
-      if (result.status === 'duplicate') batchResults.skip++;
+      if (result.status === 'duplicate') batchResults.duplicate++;
       else batchResults.ok++;
     } catch(e) {
-      batchResults.errors.push(file.name + ': ' + e.message);
-      batchResults.skip++;
+      batchResults.errors.push({
+        filename: file.name,
+        message: AppSecurity.safeErrorMessage(e, 'Filen kunde inte importeras.')
+      });
+      batchResults.failed++;
       console.error(file.name, e);
     }
   }
 
   // Done
-  msg.innerHTML =
-    '<div style="margin-bottom:8px">Import klar</div>' +
-    '<div style="background:var(--surface2);border-radius:4px;height:6px;width:100%">' +
-      '<div style="background:#1d9e75;height:6px;border-radius:4px;width:100%"></div>' +
-    '</div>';
+  renderBatchProgress(msg, 'Import klar', 100, '#1d9e75');
   preview.innerHTML =
-    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:1rem">' +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:1rem">' +
       '<div class="metric"><div class="metric-label">Importerade</div><div class="metric-value" style="color:#1d9e75">' + batchResults.ok + '</div></div>' +
-      '<div class="metric"><div class="metric-label">Hoppade över</div><div class="metric-value">' + batchResults.skip + '</div></div>' +
+      '<div class="metric"><div class="metric-label">Redan importerade</div><div class="metric-value">' + batchResults.duplicate + '</div></div>' +
+      '<div class="metric"><div class="metric-label">Misslyckade</div><div class="metric-value">' + batchResults.failed + '</div></div>' +
       '<div class="metric"><div class="metric-label">Totalt</div><div class="metric-value">' + total + '</div></div>' +
-    '</div>' +
-    (batchResults.errors.length ? '<div style="margin-top:1rem;font-size:12px;color:var(--text3)">' + batchResults.errors.slice(0,5).map(escapeHtml).join('<br>') + '</div>' : '');
+    '</div>';
+  if (batchResults.errors.length) {
+    var errorList = document.createElement('div');
+    errorList.style.cssText = 'margin-top:1rem;font-size:12px;color:var(--text3)';
+    batchResults.errors.slice(0, 5).forEach(function(error) {
+      var row = document.createElement('div');
+      row.textContent = error.filename + ': ' + error.message;
+      errorList.appendChild(row);
+    });
+    preview.appendChild(errorList);
+  }
 
   var actions = document.getElementById('upload-actions');
   actions.style.display = 'flex';
@@ -342,6 +393,7 @@ async function runBatchImport() {
 
 async function saveOneParsed(pd, item) {
   if (!pd || !pd.summary || !pd.summary.source_hash) throw new Error('FIT-filen saknar SHA-256-identitet.');
+  if (!item || !item.bytes) throw new Error('FIT-underlaget saknas.');
   await saveOriginalFitLocal(item.bytes, { source_hash: pd.summary.source_hash, filename: item.name, source_identity: pd.summary.source_identity, started_at: pd.summary.started_at });
   var body;
   try {
@@ -357,13 +409,16 @@ async function saveOneParsed(pd, item) {
   } catch (e) {
     var raw = String(e && e.message || e);
     if (/404|not found|PGRST202|import_activity_atomic/i.test(raw)) {
-      throw new Error('Importmigration 003 saknas eller är inte aktiv. Kör 003_activity_import.sql först; ingen delvis import sparades.');
+      throw new Error('Importmigration 005 saknas eller är inte aktiv. Kör migrationsserien först; ingen delvis import sparades.');
     }
     throw e;
   }
   var result = Array.isArray(body) ? body[0] : body;
   if (result && result.status === 'review') throw new Error('Flera äldre pass matchar underlaget. Ingen ny import skapades; granska dem först.');
   if (!result || !result.activity_id) throw new Error('Importen gav inget aktivitets-ID.');
+  if (typeof AppSecurity !== 'undefined' && AppSecurity.requireUuid) {
+    result.activity_id = AppSecurity.requireUuid(result.activity_id, 'pass-ID');
+  }
   return result;
 }
 
@@ -386,26 +441,34 @@ function manualNumber(id, label, min, max) {
 }
 
 async function saveManual() {
+  var status = document.getElementById('manual-status');
   try {
     var durationInput = document.getElementById('f-dur').value;
     var d = {
       activity_date:         document.getElementById('f-date').value,
       activity_type:         document.getElementById('f-type').value,
-      distance_meters:       (manualNumber('f-dist', 'Distans', 0) || 0) * 1000 || null,
+      distance_meters:       (manualNumber('f-dist', 'Distans', 0, 1000) || 0) * 1000 || null,
       duration_seconds:      parseManualDuration(durationInput),
-      avg_hr:                manualNumber('f-hr', 'Snitt-HR', 30, 250),
-      max_hr:                manualNumber('f-maxhr', 'Max-HR', 30, 250),
-      avg_cadence:           manualNumber('f-cad', 'Kadens', 0, 400),
-      elevation_gain_meters: manualNumber('f-elev', 'Höjdmeter', 0),
+      avg_hr:                manualNumber('f-hr', 'Snitt-HR', 30, 240),
+      max_hr:                manualNumber('f-maxhr', 'Max-HR', 30, 240),
+      avg_cadence:           manualNumber('f-cad', 'Kadens', 1, 300),
+      elevation_gain_meters: manualNumber('f-elev', 'Höjdmeter', 0, 20000),
       notes:                 document.getElementById('f-notes').value   || null
     };
     if (!d.activity_date) { toast('Ange datum'); return; }
     if (durationInput && (!d.duration_seconds || d.duration_seconds <= 0)) { toast('Ange en giltig tid'); return; }
+    status.textContent = 'Sparar...';
     var saved = await dbInsert('activities', d);
-    var actId = Array.isArray(saved) ? saved[0].id : saved.id;
+    var actId = AppSecurity.requireUuid(Array.isArray(saved) ? saved[0].id : saved.id, 'pass-ID');
+    status.textContent = 'Sparat';
     toast('Pass sparat!');
-    setTimeout(function() { location.href = 'activity.html?id=' + actId; }, 1000);
-  } catch(e) { toast('Fel: ' + e.message); console.error(e); }
+    setTimeout(function() { location.href = 'activity.html?id=' + encodeURIComponent(actId); }, 1000);
+  } catch(e) {
+    var message = AppSecurity.safeErrorMessage(e, 'Passet kunde inte sparas.');
+    status.textContent = message;
+    toast('Fel: ' + message);
+    console.error(e);
+  }
 }
 
 startApp(async function () {
