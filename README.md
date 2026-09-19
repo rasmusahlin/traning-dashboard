@@ -41,6 +41,7 @@ För en ny installation: kör `schema.sql`, därefter migrationerna i `supabase/
 - `005_activity_import.sql`: gemensam atomisk import, importidentitet, dubblettskydd, timer-/total tid och sparad zonfördelning. Gamla pass med entydig match kan kompletteras; tvetydiga matchningar kräver granskning.
 - `006_plan_activity_links.sql`: koppling till faktisk aktivitet, en aktivitet per planlogg, kontroll av gemensam ägare och servergenererad monoton sparversion för konfliktkontroll.
 - `007_training_profiles.sql`: gemensam profil och versionskontroll vid sparning.
+- `008_coach_notes_server_only.sql`: stänger klientåtkomst till en eventuell äldre coach-tabell och bevarar serveråtkomst; gör inget om tabellen saknas.
 
 ### Driftsättningsordning vid godkänt mandat
 
@@ -81,6 +82,6 @@ Användaren har uttryckligen godkänt säkerhetskopia, uppdatering av ansluten S
 - Transaktionstest i rätt databas verifierade syntetisk import, dubblettskydd, avvisad negativ distans, profilrevision/konfliktskydd, planlänk och kontoavskiljning. Hela testtransaktionen återställdes; inga testdata behölls.
 - Efter sammanfogning och exportfixar passerade 67 vanliga tester och 12 PostgreSQL-tester. Oberoende granskning accepterade auth/rendering/SQL och de två exportfixarna. Dess sista fynd om historiska föreslagna veckor är rättat med regression för export/återimport och negativa datumtester. Inga implementation-workers återstår.
 - Lokal webbläsarkontroll visar översikt, enkel extrapolerad prognos, aktuell veckoplan och sparad check-in. Mobilvyn och ZIP/FIT-import till testkontot kontrollerade utan konsolfel. Förhandsvisningen använder bara syntetiska data.
-- Separat befintlig behörighetsfråga utanför appens egna tabeller väntar på användarens beslut. Detaljer finns i den pågående uppgiften, inte i det offentliga underlaget. Ingen ändring av det separata flödet är gjord.
+- Användaren godkände 2026-09-19 även stängd klientåtkomst till den separata tabellen `coach_notes`. Migration 008 är installerad: PUBLIC/anon/authenticated saknar tabell- och kolumnbehörigheter, service_role behåller serveråtkomst. Tabellen var och är tom; inga uppgifter ändrades. Negativa läs-/skrivprov i drift, anonymt REST-anrop, oberoende granskning, 14 PostgreSQL-tester och 67 vanliga tester passerade. Tidigare behörigheter är sparade privat för eventuell separat godkänd återställning.
 - Efter publicering: sju centrala HTML-/JavaScript-filer kontrollerades byte för byte mot releaseversionen. Inloggningsskyddet fungerar i den publicerade webbläsarvyn utan konsolfel. Ingen inloggad användarsession testades i den publika frontendvyn; dataflöden verifierades med syntetisk frontend och återställda transaktionstester i Supabase.
-- Nästa: användaren loggar in på dashboarden och sparar sina mål/tillgängliga dagar. Den enkla extrapoleringen är kvar. Inget installations- eller publiceringsarbete återstår. Hantera det separata behörighetsflödet bara efter användarens beslut; beslutet är ännu inte lämnat.
+- Nästa: användaren loggar in på dashboarden och sparar sina mål/tillgängliga dagar. Den enkla extrapoleringen är kvar. Inget installations- eller publiceringsarbete återstår. Den separata behörighetsåtgärden är också färdig; inga beslut väntar.
