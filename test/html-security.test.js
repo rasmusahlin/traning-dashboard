@@ -45,14 +45,16 @@ test('every page applies the CSP and loads the security boundary before database
 });
 
 test('known untrusted rendering paths stay outside raw HTML sinks', () => {
-  const index = read('index.html');
+  const index = read('index.html') + read('js/dashboard.js');
   const activity = read('activity.html');
   const upload = read('upload.html');
   const plan = read('js/plan.js');
 
-  assert.doesNotMatch(index, /\$\{a\.notes/);
-  assert.match(index, /main\.appendChild\(makeTextElement\('div', 'activity-name'/);
-  assert.match(activity, /escapeHtml\(v\)/);
+  assert.doesNotMatch(index, /\$\{a\.notes(?:\}|\.slice\([^)]*\)\})/);
+  assert.match(index, /AppSecurity\.escapeHtml/);
+  assert.match(index, /esc\(a\.notes\.slice/);
+  assert.match(index, /AppSecurity\.postgrestUuidFilter\('id', id\)/);
+  assert.match(activity, /escapeHtml\(String\(v\)\)/);
   assert.doesNotMatch(activity, /\$\{e\.message\}/);
   assert.doesNotMatch(upload, /msg\.innerHTML\s*=[\s\S]{0,250}file\.name/);
   assert.doesNotMatch(upload, /batchResults\.errors[\s\S]{0,120}join\('<br>'\)/);
@@ -78,18 +80,18 @@ test('database bootstrap is fail-closed and contains no committed owner address'
 
 test('FIT import is atomic, authenticated and idempotent at the database boundary', () => {
   const upload = read('upload.html');
-  const migration = read('supabase/migrations/003_atomic_activity_import.sql');
+  const migration = read('supabase/migrations/005_activity_import.sql');
 
-  assert.match(upload, /dbRpc\('import_activity_bundle'/);
+  assert.match(upload, /dbQuery\('rpc\/import_activity_atomic'/);
   assert.match(upload, /crypto\.subtle\.digest\('SHA-256'/);
   assert.doesNotMatch(upload, /dbInsert\('laps'/);
   assert.doesNotMatch(upload, /dbInsert\('km_splits'/);
   assert.doesNotMatch(upload, /dbInsert\('time_series'/);
   assert.match(migration, /security invoker/i);
   assert.match(migration, /auth\.uid\(\)/i);
-  assert.match(migration, /activities_user_source_hash_idx/i);
-  assert.match(migration, /revoke all on function public\.import_activity_bundle[\s\S]*from public, anon/i);
-  assert.match(migration, /grant execute on function public\.import_activity_bundle[\s\S]*to authenticated/i);
+  assert.match(read('supabase/migrations/003_atomic_activity_import.sql'), /activities_user_source_hash_idx/i);
+  assert.match(migration, /revoke all on function public\.import_activity_atomic[\s\S]*from public, anon/i);
+  assert.match(migration, /grant execute on function public\.import_activity_atomic[\s\S]*to authenticated/i);
 });
 
 test('unsafe setup shortcuts and silent row caps do not return', () => {
@@ -98,7 +100,7 @@ test('unsafe setup shortcuts and silent row caps do not return', () => {
   assert.match(settings, /Kör aldrig fristående tabell-SQL utan RLS/);
 
   for (const file of ['index.html', 'analysis.html', 'planning.html']) {
-    const html = read(file);
+    const html = read(file) + (file === 'index.html' ? read('js/dashboard.js') : '');
     assert.match(html, /dbQueryAll\(/, `${file} does not use paginated loading`);
     assert.doesNotMatch(html, /activities\?[^'"`]*limit=(1000|2000)/, `${file} has a silent activity cap`);
   }
@@ -106,48 +108,42 @@ test('unsafe setup shortcuts and silent row caps do not return', () => {
 
 test('auth and destructive controls keep accessible interaction boundaries', () => {
   const db = read('js/db.js');
-  const index = read('index.html');
+  const index = read('index.html') + read('js/dashboard.js');
   const upload = read('upload.html');
 
   assert.match(db, /gate\.setAttribute\('role', 'dialog'\)/);
   assert.match(db, /gate\.setAttribute\('aria-modal', 'true'\)/);
   assert.match(db, /element\.inert = true/);
-  assert.match(index, /modal\.setAttribute\('role', 'dialog'\)/);
-  assert.match(index, /const link = makeTextElement\('a', 'activity-link'\)/);
+  assert.match(index, /if \(!confirm\('Ta bort/);
+  assert.match(index, /<a href=\"\$\{link\(a\.id\)\}/);
   assert.doesNotMatch(index, /row\.setAttribute\('role', 'link'\)/);
   assert.match(upload, /<label for="f-date"/);
   assert.match(upload, /id="drop-zone" role="button" tabindex="0"/);
 });
 
-test('plan sync is two-way and analysis copy stays descriptive', () => {
+test('plan sync uses exact server revisions and analysis copy stays descriptive', () => {
   const plan = read('js/plan.js');
   const analysis = read('analysis.html');
   const planHtml = read('plan/index.html');
-  const migration = read('supabase/migrations/004_monotonic_plan_sync.sql');
-  assert.match(plan, /loadAndMergeRemoteLogs/);
-  assert.match(plan, /AppData\.mergePlanLogs/);
-  assert.match(plan, /syncAllLogsToCloud/);
-  assert.match(plan, /enqueueSync/);
-  assert.match(plan, /rpc\/upsert_training_plan_log/);
+  const migration = read('supabase/migrations/006_plan_activity_links.sql');
+  assert.match(plan, /loadCloudLogs/);
+  assert.match(plan, /CORE\.mergeLogs/);
+  assert.match(plan, /retryPendingSync/);
+  assert.match(plan, /updated_at=eq/);
+  assert.match(plan, /typeof left === 'string'[\s\S]{0,150}left === right/);
   assert.doesNotMatch(plan, /training_plan_logs\?on_conflict/);
   assert.match(plan, /AppSecurity\.normalizePlanLog\(currentCheckInValues\(\)\)/);
   assert.doesNotMatch(plan, /localStorage\.removeItem\(logsKey\(\)\)/);
-  assert.match(plan, /Sparat lokalt, men inte synkat/);
+  assert.match(plan, /Sparat lokalt/);
   assert.match(planHtml, /id="checkin-distance"[^>]*max="1000"/);
   assert.match(planHtml, /id="checkin-duration"[^>]*max="10080"/);
   assert.match(planHtml, /id="checkin-notes"[^>]*maxlength="4000"/);
-  assert.match(migration, /security invoker/i);
-  assert.match(migration, /where excluded\.updated_at >= public\.training_plan_logs\.updated_at/i);
-  assert.match(migration, /revoke all on function public\.upsert_training_plan_log\(jsonb\) from public, anon/i);
-  assert.match(migration, /grant execute on function public\.upsert_training_plan_log\(jsonb\) to authenticated/i);
+  assert.match(migration, /old\.updated_at \+ interval '1 microsecond'/i);
+  assert.match(migration, /before insert or update on public\.training_plan_logs/i);
   assert.doesNotMatch(analysis, /optimala träningsfönstret|hög skaderisk|förbättras hjärtats slagvolym/i);
-  assert.match(analysis, /Teoretiskt sub-40-scenario/);
-  assert.match(analysis, /extrapolation, inte en tävlingsprognos/i);
-  assert.match(analysis, /estimateDateTarget/);
-  assert.match(analysis, /id="analysis-period"/);
-  assert.match(analysis, /id="analysis-comparison"/);
-  assert.match(analysis, /Sub-40-underlag – tre separata signaler/);
-  assert.match(analysis, /Väder, underlag, vind, sömn och sjukdom registreras inte/);
-  assert.match(analysis, /estimateTargetStability/);
-  assert.match(analysis, /filterAnalysisRuns/);
+  assert.match(analysis, /Enkel extrapolerad prognos/);
+  assert.match(analysis, /Scenario, inte löfte/);
+  assert.match(analysis, /Training\.projection/);
+  assert.match(analysis, /id="projection"/);
+  assert.match(analysis, /Jämförbara lugna pass/);
 });

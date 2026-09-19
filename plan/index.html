@@ -15,21 +15,21 @@
     <span class="nav-brand">Träningsdashboard</span>
     <div class="nav-links">
       <a href="../index.html">Översikt</a>
-      <a href="../analysis.html">Analys</a>
-      <a href="../planning.html">Planering</a>
-      <a href="./" class="active">Plan</a>
-      <a href="../upload.html">Ladda upp</a>
-      <a href="../settings.html">Inställningar</a>
+      <a href="../analysis.html">Utveckling</a>
+      <a href="./" class="active">Min plan</a>
+      <a href="../upload.html">Importera</a>
+      <a href="../settings.html">Mål &amp; inställningar</a>
     </div>
   </div>
 </nav>
 
 <div class="container">
   <div class="page-header plan-header">
-    <div>
-      <h1>Plan</h1>
-      <p id="plan-block-label">Laddar plan...</p>
-    </div>
+      <div>
+        <h1>Min plan</h1>
+        <p id="plan-block-label">Laddar plan...</p>
+        <p id="plan-block-status" class="plan-muted"></p>
+      </div>
     <div class="plan-header-actions">
       <button class="btn btn-sm" id="export-logs-btn" type="button">Exportera loggar</button>
       <button class="btn btn-sm" id="import-logs-btn" type="button">Importera backup</button>
@@ -43,24 +43,29 @@
   <main id="plan-app" hidden>
     <section class="plan-controls card">
       <div class="plan-control-group">
+        <label class="plan-label" for="plan-history-select">Planhistorik</label>
+        <select class="plan-select" id="plan-history-select" aria-label="Välj planhistorik"></select>
+      </div>
+      <div class="plan-control-group" id="archive-weight-control">
         <label class="plan-label" for="weight-kg">Kroppsvikt</label>
         <div class="plan-inline-control">
           <input class="plan-number-input" id="weight-kg" type="number" min="35" max="180" step="0.1">
           <span class="plan-muted">kg</span>
         </div>
       </div>
-      <label class="plan-check">
+      <label class="plan-check" id="archive-four-pass-control">
         <input id="four-pass-mode" type="checkbox">
         <span>4-passläge</span>
       </label>
-      <label class="plan-check">
+      <label class="plan-check" id="archive-hide-optional-control">
         <input id="hide-optional" type="checkbox">
-        <span>Dölj optional recovery</span>
+        <span>Dölj valfri återhämtning</span>
       </label>
       <div class="plan-sync-note">
         <span id="sync-note" role="status">Sparar lokalt i webbläsaren.</span>
         <button class="btn btn-sm" id="retry-sync" type="button" hidden>Försök synka igen</button>
       </div>
+      <button class="btn btn-sm" id="import-legacy-local-logs" type="button">Hämta tidigare lokala loggar</button>
     </section>
 
     <section class="metrics plan-metrics" id="plan-metrics">
@@ -70,7 +75,7 @@
         <div class="metric-sub" id="metric-week-dates"></div>
       </div>
       <div class="metric">
-        <div class="metric-label">Planerad distans</div>
+        <div class="metric-label" id="metric-distance-label">Planerad distans</div>
         <div class="metric-value" id="metric-distance">-</div>
         <div class="metric-sub" id="metric-distance-optional"></div>
       </div>
@@ -109,15 +114,20 @@
 
       <aside>
         <div class="card" id="nutrition-card"></div>
-        <div class="card" id="readiness-card"></div>
+    <div class="card" id="readiness-card"></div>
       </aside>
+    </section>
+
+    <section class="plan-proposal-grid">
+      <div class="card" id="current-plan-proposal"></div>
+      <div class="card" id="activity-link-panel"></div>
     </section>
 
     <section class="plan-detail-grid">
       <div class="card" id="day-detail"></div>
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Check-in</span>
+          <span class="card-title">Incheckning</span>
           <span class="plan-muted" id="checkin-date"></span>
         </div>
         <form id="checkin-form" class="checkin-form">
@@ -135,20 +145,8 @@
             <input id="checkin-rpe" type="number" min="1" max="10" step="1">
           </label>
           <label>
-            <span>Höftsmärta 0-10</span>
+            <span>Obehag 0-10</span>
             <input id="checkin-hip" type="number" min="0" max="10" step="1">
-          </label>
-          <label>
-            <span>Sömn 1-5</span>
-            <input id="checkin-sleep" type="number" min="1" max="5" step="1">
-          </label>
-          <label>
-            <span>Stress 1-5</span>
-            <input id="checkin-stress" type="number" min="1" max="5" step="1">
-          </label>
-          <label>
-            <span>Energi 1-5</span>
-            <input id="checkin-energy" type="number" min="1" max="5" step="1">
           </label>
           <label>
             <span>Faktisk distans (km)</span>
@@ -162,6 +160,14 @@
             <span>Kommentar</span>
             <textarea id="checkin-notes" rows="4" maxlength="4000"></textarea>
           </label>
+          <details class="checkin-details">
+            <summary>Återhämtning i detalj</summary>
+            <div class="checkin-details-grid">
+              <label><span>Sömn 1-5</span><input id="checkin-sleep" type="number" min="1" max="5" step="1"></label>
+              <label><span>Stress 1-5</span><input id="checkin-stress" type="number" min="1" max="5" step="1"></label>
+              <label><span>Energi 1-5</span><input id="checkin-energy" type="number" min="1" max="5" step="1"></label>
+            </div>
+          </details>
           <div class="checkin-actions">
             <button class="btn btn-primary" type="submit">Spara check-in</button>
             <button class="btn" id="mark-completed" type="button">Klar</button>
@@ -174,7 +180,7 @@
 
     <section class="card">
       <div class="card-header block-summary-header">
-        <span class="card-title">Block summary</span>
+          <span class="card-title">Blocksammanfattning</span>
         <div class="block-summary-actions">
           <button class="btn btn-sm" id="export-summary-json" type="button">JSON</button>
           <button class="btn btn-sm" id="export-summary-csv" type="button">CSV</button>
@@ -190,6 +196,9 @@
 <script src="../js/security.js"></script>
 <script src="../js/data-utils.js"></script>
 <script src="../js/db.js"></script>
+<script src="../js/profile.js"></script>
+<script src="../js/training.js"></script>
+<script src="../js/plan-core.js"></script>
 <script src="../js/plan.js"></script>
 </body>
 </html>
