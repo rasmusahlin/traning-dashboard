@@ -10,6 +10,7 @@ const DB_BASE_HEADERS = {
 let authSession = loadAuthSession();
 let appStartCallback = null;
 let appStarted = false;
+let refreshPromise = null;
 
 function loadAuthSession() {
   try {
@@ -82,7 +83,8 @@ async function refreshAuthSession() {
 
 async function getValidSession() {
   if (sessionIsFresh(authSession)) return authSession;
-  return refreshAuthSession();
+  if (!refreshPromise) refreshPromise = refreshAuthSession().finally(() => { refreshPromise = null; });
+  return refreshPromise;
 }
 
 async function requireAuth() {
@@ -101,6 +103,8 @@ async function signIn(email, password) {
   });
   if (!res.ok) throw new Error(authErrorMessage(await res.text()));
   saveAuthSession(await res.json());
+  // Reauthentication must rebuild all page state, including account-scoped caches.
+  if (appStarted) { location.reload(); return; }
   hideAuthGate();
   injectAuthControls();
   await runStartedApp();
@@ -212,7 +216,9 @@ async function dbQuery(path, opts = {}) {
       clearAuthSession();
       showAuthGate('Sessionen har gått ut. Logga in igen.');
     }
-    throw new Error(await res.text());
+    const error = new Error(await res.text());
+    error.status = res.status;
+    throw error;
   }
   return res.status === 204 ? null : res.json();
 }
@@ -223,6 +229,30 @@ async function dbInsert(table, data, opts = {}) {
     headers: { 'Prefer': opts.upsert ? 'resolution=merge-duplicates,return=representation' : 'return=representation' },
     body: JSON.stringify(data)
   });
+}
+
+// Continue until an empty page: the server may cap responses below pageSize.
+async function dbQueryAll(path, pageSize = 500) {
+  const [table, raw = ''] = path.split('?');
+  const query = new URLSearchParams(raw);
+  query.delete('limit');
+  query.delete('offset');
+  const order = query.get('order') || '';
+  if (!order.split(',').some(part => /^id(?:\.|$)/.test(part))) query.set('order', order ? `${order},id.asc` : 'id.asc');
+  const rows = [];
+  let previousSignature = null;
+  for (let page = 0; page < 10000; page++) {
+    query.set('offset', String(rows.length));
+    query.set('limit', String(pageSize));
+    const items = await dbQuery(`${table}?${query}`);
+    if (!Array.isArray(items)) throw new Error('Datakällan returnerade inte en lista.');
+    if (!items.length) return rows;
+    const signature = JSON.stringify(items);
+    if (signature === previousSignature) throw new Error('Historiken kunde inte hämtas fullständigt. Försök igen.');
+    previousSignature = signature;
+    rows.push(...items);
+  }
+  throw new Error('Historiken är för stor för att hämtas i en omgång.');
 }
 
 // HR zone config (editable via settings). Uses the Karvonen method / HR reserve.
@@ -261,6 +291,10 @@ function buildHRConfig(maxInput = DEFAULT_HR_MAX, restInput = DEFAULT_HR_REST) {
 }
 
 function getHRConfig() {
+  if (typeof TrainingProfile !== 'undefined') {
+    const profile = TrainingProfile.get();
+    return buildHRConfig(profile.hrMax, profile.hrRest);
+  }
   return buildHRConfig(
     localStorage.getItem('hr_max') || DEFAULT_HR_MAX,
     localStorage.getItem('hr_rest') || DEFAULT_HR_REST
@@ -275,8 +309,9 @@ function hrZone(bpm) {
 // Format helpers
 function fmtPace(secPerKm) {
   if (!secPerKm || secPerKm <= 0) return '–';
-  const m = Math.floor(secPerKm / 60);
-  const s = Math.round(secPerKm % 60).toString().padStart(2, '0');
+  const rounded = Math.round(secPerKm);
+  const m = Math.floor(rounded / 60);
+  const s = (rounded % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
 }
 
@@ -311,11 +346,14 @@ function activityType(raw = '') {
   const r = raw.toLowerCase();
   if (r.includes('run') || r.includes('löp')) return 'running';
   if (r.includes('strength') || r.includes('gym') || r.includes('styrke')) return 'strength';
-  return 'hiking';
+  if (r.includes('hik') || r.includes('walk') || r.includes('vandr')) return 'hiking';
+  if (r.includes('cycl') || r.includes('bik')) return 'cycling';
+  if (r.includes('swim')) return 'swimming';
+  return 'unknown';
 }
 
 function typeLabel(t) {
-  return { running: 'Löpning', strength: 'Styrketräning', hiking: 'Vandring' }[t] || t;
+  return { running: 'Löpning', strength: 'Styrketräning', hiking: 'Vandring', cycling: 'Cykling', swimming: 'Simning', unknown: 'Annan aktivitet' }[t] || t;
 }
 
 function typeDot(t) {

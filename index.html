@@ -3,383 +3,57 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Träningsdashboard</title>
+  <title>Min träning – Träningsdashboard</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-
-<nav>
-  <div class="container nav-inner">
-    <span class="nav-brand">Träningsdashboard</span>
-    <div class="nav-links">
-      <a href="index.html" class="active">Översikt</a>
-      <a href="analysis.html">Analys</a>
-      <a href="planning.html">Planering</a>
-      <a href="plan/">Plan</a>
-      <a href="upload.html">Ladda upp</a>
-      <a href="settings.html">Inställningar</a>
-    </div>
+<nav aria-label="Huvudmeny"><div class="container nav-inner">
+  <a class="nav-brand" href="index.html">Träningsdashboard</a>
+  <div class="nav-links">
+    <a href="index.html" class="active" aria-current="page">Översikt</a>
+    <a href="analysis.html">Utveckling</a>
+    <a href="plan/">Min plan</a>
+    <a href="upload.html">Importera</a>
+    <a href="settings.html">Mål & inställningar</a>
   </div>
-</nav>
-
-<div class="container">
-  <div class="page-header">
-    <h1>Översikt</h1>
-    <p id="conn-label"><span class="status-dot status-loading" id="conn-dot"></span><span id="conn-text">Ansluter...</span></p>
-  </div>
-
-  <!-- Filter row -->
-  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:1.5rem">
-    <span style="font-size:13px;color:var(--text2)">Från:</span>
-    <input type="date" id="filter-from" style="font-size:13px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text)">
-    <span style="font-size:13px;color:var(--text2)">Till:</span>
-    <input type="date" id="filter-to" style="font-size:13px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text)">
-    <button class="btn btn-sm" onclick="setQuick(30)">30 d</button>
-    <button class="btn btn-sm" onclick="setQuick(90)">3 mån</button>
-    <button class="btn btn-sm" onclick="setQuick(365)">12 mån</button>
-    <button class="btn btn-sm" onclick="setQuick(0)">Allt</button>
-    <span style="font-size:13px;color:var(--text3);margin-left:4px" id="filter-count"></span>
-  </div>
-
-  <!-- Metric cards -->
-  <div class="metrics" id="metrics">
-    <div class="metric"><div class="metric-label">Total distans</div><div class="metric-value" id="m-dist">–</div><div class="metric-sub" id="m-dist-sub"></div></div>
-    <div class="metric"><div class="metric-label">Antal löppass</div><div class="metric-value" id="m-runs">–</div><div class="metric-sub" id="m-runs-sub"></div></div>
-    <div class="metric"><div class="metric-label">Snitt puls (löpning)</div><div class="metric-value" id="m-hr">–<span class="metric-unit"> bpm</span></div><div class="metric-sub">senaste 10 pass</div></div>
-    <div class="metric"><div class="metric-label">Meter / hjärtslag</div><div class="metric-value" id="m-mps">–<span class="metric-unit" id="m-mps-trend"></span></div><div class="metric-sub">senaste 10 pass · <span id="m-mps-sub"></span></div></div>
-  </div>
-
-  <!-- Charts -->
-  <div class="chart-row">
-    <div class="card">
-      <div class="card-header"><span class="card-title">Veckovolym (km)</span></div>
-      <div style="position:relative;height:180px">
-        <canvas id="chart-weekly" role="img" aria-label="Veckovolym i km">Laddar...</canvas>
-      </div>
+</div></nav>
+<main class="container">
+  <header class="page-header"><h1>Min träning</h1><p>Utvecklingen, läget nu och ditt nästa steg.</p></header>
+  <div id="data-status" class="data-note" role="status">Hämtar hela din träningshistorik…</div>
+  <section class="dashboard-lead">
+    <div class="card" id="goal-card"><p class="muted">Hämtar mål…</p></div>
+    <div class="card" id="next-card"><p class="muted">Hämtar planunderlag…</p></div>
+  </section>
+  <section class="card" aria-labelledby="period-heading">
+    <div class="card-header"><h2 class="card-title" id="period-heading">De senaste fyra hela veckorna</h2><a class="insight-link" href="analysis.html">Utforska utvecklingen</a></div>
+    <p class="muted" id="period-label"></p>
+    <div id="period-metrics" class="period-comparison"></div>
+    <p class="muted" id="period-conclusion"></p>
+  </section>
+  <section class="chart-row">
+    <div class="card"><div class="card-header"><h2 class="card-title">Löpningen vecka för vecka</h2></div><div class="chart-frame"><canvas id="chart-weekly" role="img" aria-label="Löpkilometer under de senaste tolv kalenderveckorna"></canvas></div><p class="muted" id="weekly-note"></p><details><summary>Visa veckorna som tabell</summary><div id="weekly-table"></div></details></div>
+    <div class="card" id="comparable-card"></div>
+  </section>
+  <section class="card" id="strength-card"></section>
+  <section class="card" aria-labelledby="activity-heading">
+    <div class="card-header"><h2 class="card-title" id="activity-heading">Dina pass</h2><a class="insight-link" href="planning.html">Passmix och klassning</a></div>
+    <div class="filter-row">
+      <label>Från<input type="date" id="filter-from"></label>
+      <label>Till<input type="date" id="filter-to"></label>
+      <label>Aktivitet<select id="type-filter"><option value="all">Alla typer</option><option value="running">Löpning</option><option value="strength">Styrka</option><option value="hiking">Vandring</option><option value="cycling">Cykling</option><option value="swimming">Simning</option><option value="unknown">Annan aktivitet</option></select></label>
+      <button class="btn" id="filter-all">Hela historiken</button>
+      <span class="muted" id="filter-count"></span>
     </div>
-    <div class="card">
-      <div class="card-header"><span class="card-title">Snitt pace per pass</span></div>
-      <div style="position:relative;height:180px">
-        <canvas id="chart-pace" role="img" aria-label="Genomsnittlig pace per löppass">Laddar...</canvas>
-      </div>
-    </div>
-  </div>
-
-  <div class="chart-row">
-    <div class="card">
-      <div class="card-header"><span class="card-title">HR-trend (snitt per pass)</span></div>
-      <div style="position:relative;height:180px">
-        <canvas id="chart-hr" role="img" aria-label="HR-trend per pass">Laddar...</canvas>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-header"><span class="card-title">Styrka & löpbalans</span></div>
-      <div id="strength-balance" style="height:180px;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:0 4px">
-        <div style="display:flex;gap:1.5rem">
-          <div>
-            <div class="metric-value" id="s-count" style="font-size:22px">–</div>
-            <div class="metric-sub">styrkepass</div>
-            <div class="metric-sub" id="s-per-week" style="margin-top:2px"></div>
-          </div>
-          <div style="border-left:0.5px solid var(--border);padding-left:1.5rem">
-            <div class="metric-value" id="s-pct" style="font-size:22px">–</div>
-            <div class="metric-sub">av löpveckor inkl. styrka</div>
-            <div class="metric-sub" id="s-pct-note" style="margin-top:2px"></div>
-          </div>
-        </div>
-        <div id="s-bar-wrap" style="display:none">
-          <div style="font-size:11px;color:var(--text3);margin-bottom:4px" id="s-bar-label"></div>
-          <div style="background:var(--surface2);border-radius:3px;height:6px;width:100%">
-            <div id="s-bar-fill" style="height:6px;border-radius:3px;transition:width 0.4s"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Activity list -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">Aktiviteter</span>
-      <div style="display:flex;gap:6px;align-items:center">
-        <select id="type-filter" onchange="renderList()" style="font-size:12px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);color:var(--text)">
-          <option value="all">Alla typer</option>
-          <option value="running">Löpning</option>
-          <option value="strength">Styrka</option>
-          <option value="hiking">Vandring</option>
-        </select>
-        <button class="btn btn-sm" id="show-all-btn" onclick="toggleAll()">Visa alla</button>
-      </div>
-    </div>
-    <div class="activity-list" id="activity-list">
-      <div class="empty"><div class="empty-icon">◎</div>Inga aktiviteter ännu – ladda upp ditt första pass</div>
-    </div>
-  </div>
-</div>
-
-<div id="toast" class="toast"></div>
-
+    <div class="activity-list" id="activity-list"></div>
+    <button class="btn" id="show-more" hidden>Visa fler pass</button>
+  </section>
+</main>
+<div id="toast" class="toast" role="status"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="js/db.js"></script>
-<script>
-let allActivities = [];
-let showAll = false;
-let charts = {};
-let confirmDeleteId = null;
-
-// Init date range to last 90 days
-function initDates() {
-  const to = new Date();
-  const from = new Date();
-  from.setDate(from.getDate() - 90);
-  document.getElementById('filter-to').value = to.toISOString().slice(0,10);
-  document.getElementById('filter-from').value = from.toISOString().slice(0,10);
-  document.getElementById('filter-from').addEventListener('change', render);
-  document.getElementById('filter-to').addEventListener('change', render);
-}
-
-function setQuick(days) {
-  const to = new Date();
-  const from = new Date();
-  if (days > 0) from.setDate(from.getDate() - days);
-  else from.setFullYear(2000); // "all"
-  document.getElementById('filter-to').value = to.toISOString().slice(0,10);
-  document.getElementById('filter-from').value = from.toISOString().slice(0,10);
-  render();
-}
-
-async function init() {
-  initDates();
-  try {
-    allActivities = await dbQuery('activities?order=activity_date.desc&limit=1000');
-    setConnected(true);
-  } catch(e) {
-    setConnected(false);
-    console.error('DB-fel:', e);
-    return;
-  }
-  try {
-    render();
-  } catch(e) {
-    console.error('Render-fel:', e);
-  }
-}
-
-function setConnected(ok) {
-  document.getElementById('conn-dot').className = 'status-dot ' + (ok ? 'status-ok' : 'status-err');
-  document.getElementById('conn-text').textContent = ok ? 'Ansluten till Supabase' : 'Anslutningsfel – kontrollera nätverket';
-}
-
-function toggleAll() {
-  showAll = !showAll;
-  document.getElementById('show-all-btn').textContent = showAll ? 'Visa färre' : 'Visa alla';
-  renderList();
-}
-
-function filtered() {
-  const from = document.getElementById('filter-from')?.value;
-  const to   = document.getElementById('filter-to')?.value;
-  return allActivities.filter(a => {
-    if (from && a.activity_date < from) return false;
-    if (to   && a.activity_date > to)   return false;
-    return true;
-  });
-}
-
-function render() {
-  const acts = filtered();
-  const runs = acts.filter(a => a.activity_type === 'running');
-
-  // Metrics
-  const totalDist = runs.reduce((s, a) => s + (a.distance_meters || 0), 0);
-  document.getElementById('m-dist').textContent = totalDist > 0 ? (totalDist / 1000).toFixed(1) + ' km' : '–';
-  const fromV = document.getElementById('filter-from')?.value || '';
-  const toV   = document.getElementById('filter-to')?.value   || '';
-  document.getElementById('m-dist-sub').textContent = fromV && toV ? fromV.slice(5) + ' – ' + toV.slice(5) : '';
-  document.getElementById('filter-count').textContent = acts.length + ' pass';
-  document.getElementById('m-runs').textContent = runs.length || '–';
-  document.getElementById('m-runs-sub').textContent = `${acts.filter(a=>a.activity_type==='strength').length} styrke, ${acts.filter(a=>a.activity_type==='hiking').length} vandring`;
-
-  const hrArr = runs.filter(a => a.avg_hr).slice(0, 10).map(a => a.avg_hr);
-  document.getElementById('m-hr').innerHTML = hrArr.length ? Math.round(hrArr.reduce((a,b)=>a+b)/hrArr.length) + '<span class="metric-unit"> bpm</span>' : '–';
-
-  // Meter per heartbeat (= EF): speed_m_per_s * 60 / avg_hr
-  const mpsRuns = runs.filter(a => a.avg_hr > 0 && (a.distance_meters||0) > 2000 && a.duration_seconds);
-  if (mpsRuns.length >= 2) {
-    const calcMps = a => { const sp = a.avg_speed_ms || (a.distance_meters / a.duration_seconds); return +(sp * 60 / a.avg_hr).toFixed(3); };
-    const recent = mpsRuns.slice(0, 10).map(calcMps);
-    const older  = mpsRuns.slice(10, 20).map(calcMps);
-    const avg    = v => v.reduce((a,b)=>a+b,0) / v.length;
-    const curAvg = +avg(recent).toFixed(2);
-    const trend  = older.length >= 3 ? curAvg - +avg(older).toFixed(2) : null;
-    const trendStr = trend == null ? '' : trend > 0.03 ? ' ↑' : trend < -0.03 ? ' ↓' : ' →';
-    const trendCol = trend == null ? '' : trend > 0.03 ? 'color:#1d9e75' : trend < -0.03 ? 'color:#e24b4a' : 'color:var(--text3)';
-    const level = curAvg >= 1.8 ? 'Löparnivå' : curAvg >= 1.6 ? 'Vältränad' : curAvg >= 1.4 ? 'Bas' : 'Under bas';
-    document.getElementById('m-mps').childNodes[0].textContent = curAvg;
-    document.getElementById('m-mps-trend').innerHTML = `<span style="font-size:16px;${trendCol}">${trendStr}</span>`;
-    document.getElementById('m-mps-sub').textContent = level;
-  }
-
-  renderCharts(acts, runs);
-  renderList();
-}
-
-function renderList() {
-  let acts = filtered();
-  const typeF = document.getElementById('type-filter')?.value || 'all';
-  if (typeF !== 'all') acts = acts.filter(a => a.activity_type === typeF);
-  const display = showAll ? acts : acts.slice(0, 15);
-  const el = document.getElementById('activity-list');
-  if (!acts.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">◎</div>Inga aktiviteter i valt tidsintervall</div>';
-    return;
-  }
-  el.innerHTML = display.map(a => {
-    const dist = a.distance_meters ? (a.distance_meters/1000).toFixed(1) + ' km' : (a.activity_type === 'strength' ? '–' : '–');
-    const dur  = fmtDuration(a.duration_seconds);
-    const pace = a.activity_type === 'running' ?
-      (a.avg_speed_ms ? fmtPace(1000/a.avg_speed_ms) : (a.distance_meters && a.duration_seconds ? fmtPace(a.duration_seconds/(a.distance_meters/1000)) : '–')) : null;
-    const meta = fmtDate(a.activity_date) + ' · ' + dur +
-      (a.avg_hr ? ' · ' + a.avg_hr + ' bpm' : '') +
-      (a.elevation_gain_meters ? ' · +' + Math.round(a.elevation_gain_meters) + 'm' : '');
-    return `<div class="activity-item" style="position:relative" onclick="location.href='activity.html?id=${a.id}'">
-      <div class="activity-dot ${typeDotClass(a.activity_type)}">${typeDot(a.activity_type)}</div>
-      <div class="activity-main">
-        <div class="activity-name">${typeLabel(a.activity_type)}${a.notes ? ' · ' + a.notes.slice(0,40) : ''}</div>
-        <div class="activity-meta">${meta}</div>
-      </div>
-      <div class="activity-right">
-        <div class="activity-dist">${dist}</div>
-        <div class="activity-pace">${pace ? pace+'/km' : ''}</div>
-      </div>
-      <button onclick="event.stopPropagation();confirmDelete('${a.id}','${typeLabel(a.activity_type)} ${a.activity_date}')"
-        style="margin-left:8px;padding:4px 8px;border:0.5px solid var(--border2);border-radius:6px;background:none;color:var(--text3);font-size:12px;cursor:pointer;flex-shrink:0"
-        title="Ta bort pass">✕</button>
-    </div>`;
-  }).join('');
-  document.getElementById('show-all-btn').textContent = showAll || acts.length <= 15 ? (acts.length > 15 ? 'Visa färre' : '') : 'Visa alla ' + acts.length;
-}
-
-function confirmDelete(id, label) {
-  confirmDeleteId = id;
-  const existing = document.getElementById('delete-modal');
-  if (existing) existing.remove();
-  const modal = document.createElement('div');
-  modal.id = 'delete-modal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:200';
-  modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:360px;width:90%;border:0.5px solid var(--border)">
-      <div style="font-size:15px;font-weight:500;margin-bottom:8px">Ta bort pass?</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:1.5rem">${label}<br>Laps, splits och tidsseriedata raderas också.</div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn" onclick="document.getElementById('delete-modal').remove()">Avbryt</button>
-        <button class="btn" style="background:#fcebeb;color:#791f1f;border-color:#f7c1c1" onclick="doDelete()">Ta bort</button>
-      </div>
-    </div>`;
-  document.body.appendChild(modal);
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-}
-
-async function doDelete() {
-  if (!confirmDeleteId) return;
-  document.getElementById('delete-modal').remove();
-  try {
-    await dbQuery('activities?id=eq.' + confirmDeleteId, { method:'DELETE', headers:{'Prefer':'return=minimal'} });
-    allActivities = allActivities.filter(a => a.id !== confirmDeleteId);
-    confirmDeleteId = null;
-    render();
-    toast('Pass borttaget');
-  } catch(e) {
-    toast('Fel: ' + e.message);
-    console.error(e);
-  }
-}
-
-function renderCharts(acts, runs) {
-  Object.values(charts).forEach(c => c.destroy());
-  charts = {};
-
-  // Weekly volume
-  const weeks = {};
-  runs.forEach(a => {
-    const d = new Date(a.activity_date);
-    const mon = new Date(d);
-    mon.setDate(d.getDate() - ((d.getDay()+6)%7));
-    const k = mon.toISOString().slice(0,10);
-    weeks[k] = (weeks[k]||0) + (a.distance_meters||0)/1000;
-  });
-  const wkeys = Object.keys(weeks).sort().slice(-12);
-
-  charts.weekly = new Chart(document.getElementById('chart-weekly'), {
-    type: 'bar',
-    data: {
-      labels: wkeys.map(k => k.slice(5)),
-      datasets: [{ data: wkeys.map(k => +weeks[k].toFixed(1)), backgroundColor: '#185FA5', borderRadius: 4 }]
-    },
-    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,grid:{color:'rgba(128,128,128,0.08)'},ticks:{font:{size:11}}},x:{grid:{display:false},ticks:{font:{size:11},autoSkip:true,maxRotation:0}}} }
-  });
-
-  // Pace trend
-  const paceRuns = runs.filter(a => a.distance_meters && a.duration_seconds).slice(0,20).reverse();
-  charts.pace = new Chart(document.getElementById('chart-pace'), {
-    type: 'line',
-    data: {
-      labels: paceRuns.map(a => a.activity_date.slice(5)),
-      datasets: [{
-        data: paceRuns.map(a => +(a.duration_seconds/(a.distance_meters/1000)).toFixed(1)),
-        borderColor: '#1d9e75', backgroundColor:'rgba(29,158,117,0.07)',
-        tension:0.3, pointRadius:4, fill:true
-      }]
-    },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:v=>fmtPace(v.raw)+'/km'}}},
-      scales:{
-        y:{reverse:true, grid:{color:'rgba(128,128,128,0.08)'},ticks:{font:{size:11},callback:v=>fmtPace(v)}},
-        x:{grid:{display:false},ticks:{font:{size:11}}}
-      }
-    }
-  });
-
-  // HR trend
-  const hrRuns = runs.filter(a=>a.avg_hr).slice(0,20).reverse();
-  charts.hr = new Chart(document.getElementById('chart-hr'), {
-    type: 'line',
-    data: {
-      labels: hrRuns.map(a=>a.activity_date.slice(5)),
-      datasets:[{data:hrRuns.map(a=>a.avg_hr),borderColor:'#d85a30',backgroundColor:'rgba(216,90,48,0.07)',tension:0.3,pointRadius:4,fill:true}]
-    },
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{grid:{color:'rgba(128,128,128,0.08)'},ticks:{font:{size:11}}},x:{grid:{display:false},ticks:{font:{size:11}}}}}
-  });
-
-  // Strength balance
-  const strengths = acts.filter(a => a.activity_type === 'strength');
-  const fromD = new Date(document.getElementById('filter-from')?.value || '2000-01-01');
-  const toD   = new Date(document.getElementById('filter-to')?.value   || new Date());
-  const periodWeeks = Math.max(1, Math.round((toD - fromD) / (7 * 24 * 3600 * 1000)));
-
-  const toWeekKey = d => { const dt = new Date(d); const mon = new Date(dt); mon.setDate(dt.getDate() - ((dt.getDay()+6)%7)); return mon.toISOString().slice(0,10); };
-  const runWeeks = new Set(runs.map(a => toWeekKey(a.activity_date)));
-  const strWeeks = new Set(strengths.map(a => toWeekKey(a.activity_date)));
-  const bothWeeks = [...runWeeks].filter(w => strWeeks.has(w)).length;
-  const pct = runWeeks.size > 0 ? Math.round(bothWeeks / runWeeks.size * 100) : 0;
-  const perWeek = (strengths.length / periodWeeks).toFixed(1);
-
-  document.getElementById('s-count').textContent = strengths.length || '–';
-  document.getElementById('s-per-week').textContent = strengths.length ? perWeek + '/vecka' : '';
-  document.getElementById('s-pct').textContent = runWeeks.size ? pct + '%' : '–';
-  document.getElementById('s-pct').style.color = pct >= 60 ? 'var(--z1t)' : pct >= 35 ? 'var(--z3t)' : 'var(--z5t)';
-  document.getElementById('s-pct-note').textContent = pct >= 60 ? 'Bra konsistens' : pct >= 35 ? 'Kan förbättras' : runWeeks.size ? 'Låg frekvens' : '';
-
-  if (runWeeks.size > 0) {
-    document.getElementById('s-bar-wrap').style.display = 'block';
-    document.getElementById('s-bar-label').textContent = `${bothWeeks} av ${runWeeks.size} löpveckor inkluderade styrka`;
-    document.getElementById('s-bar-fill').style.width = pct + '%';
-    document.getElementById('s-bar-fill').style.background = pct >= 60 ? '#1d9e75' : pct >= 35 ? '#ba7517' : '#e24b4a';
-  }
-}
-
-startApp(init);
-</script>
+<script src="js/profile.js"></script>
+<script src="js/training.js"></script>
+<script src="js/plan-core.js"></script>
+<script src="js/dashboard.js"></script>
 </body>
 </html>

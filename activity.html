@@ -13,11 +13,10 @@
     <span class="nav-brand">Träningsdashboard</span>
     <div class="nav-links">
       <a href="index.html">Översikt</a>
-      <a href="analysis.html">Analys</a>
-      <a href="planning.html">Planering</a>
-      <a href="plan/">Plan</a>
-      <a href="upload.html">Ladda upp</a>
-      <a href="settings.html">Inställningar</a>
+      <a href="analysis.html">Utveckling</a>
+      <a href="plan/">Min plan</a>
+      <a href="upload.html">Importera</a>
+      <a href="settings.html">Mål & inställningar</a>
     </div>
   </div>
 </nav>
@@ -36,30 +35,36 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="js/db.js"></script>
+<script src="js/profile.js"></script>
+<script src="js/training.js"></script>
 <script>
 let charts = {};
+let currentActivity = null;
 const actId = new URLSearchParams(location.search).get('id');
 
 async function init() {
-  if (!actId) { document.getElementById('main-content').innerHTML = '<div class="empty">Inget pass-ID angivet.</div>'; return; }
+  if (!/^[0-9a-f-]{36}$/i.test(actId || '')) { document.getElementById('main-content').innerHTML = '<div class="empty">Inget giltigt pass-ID angivet.</div>'; return; }
   try {
+    await TrainingProfile.load();
     const [acts, laps, splits] = await Promise.all([
       dbQuery(`activities?id=eq.${actId}`),
-      dbQuery(`laps?activity_id=eq.${actId}&order=lap_index.asc`),
-      dbQuery(`km_splits?activity_id=eq.${actId}&order=km.asc`)
+      dbQueryAll(`laps?activity_id=eq.${actId}&order=lap_index.asc,id.asc`),
+      dbQueryAll(`km_splits?activity_id=eq.${actId}&order=km.asc,id.asc`)
     ]);
     const act = acts?.[0];
     if (!act) { document.getElementById('main-content').innerHTML = '<div class="empty">Passet hittades inte.</div>'; return; }
+    currentActivity = act;
     render(act, laps || [], splits || []);
+    renderActivityTags(act);
   } catch(e) {
-    document.getElementById('main-content').innerHTML = `<div class="empty">Fel: ${e.message}</div>`;
+    document.getElementById('main-content').innerHTML = `<div class="empty">Fel: ${escapeHtml(e.message)}</div>`;
   }
 }
 
 function render(act, laps, splits) {
   const isRun = act.activity_type === 'running';
-  const pace = act.duration_seconds && act.distance_meters ? fmtPace(act.duration_seconds/(act.distance_meters/1000)) : '–';
-  const hrCfg = getHRConfig();
+  const pace = fmtPace(Training.paceSeconds(act).seconds);
+  const hrCfg = act.hr_zone_config || getHRConfig();
 
   document.getElementById('main-content').innerHTML = `
     <div class="page-header">
@@ -75,17 +80,18 @@ function render(act, laps, splits) {
     <!-- Summary metrics -->
     <div class="metrics" style="grid-template-columns:repeat(${isRun?5:3},1fr);margin-bottom:1.5rem">
       <div class="metric"><div class="metric-label">Distans</div><div class="metric-value">${act.distance_meters?(act.distance_meters/1000).toFixed(2):'-'}<span class="metric-unit"> km</span></div></div>
-      <div class="metric"><div class="metric-label">Tid</div><div class="metric-value" style="font-size:20px">${fmtDuration(act.duration_seconds)}</div></div>
-      ${isRun ? `<div class="metric"><div class="metric-label">Snitt pace</div><div class="metric-value" style="font-size:20px">${pace}<span class="metric-unit">/km</span></div></div>` : ''}
-      ${act.avg_hr ? `<div class="metric"><div class="metric-label">Snitt HR</div><div class="metric-value">${act.avg_hr}<span class="metric-unit"> bpm</span></div><div class="metric-sub">max ${act.max_hr||'–'} bpm</div></div>` : ''}
+      <div class="metric"><div class="metric-label">Tid med aktiv timer</div><div class="metric-value" style="font-size:20px">${fmtDuration(act.moving_time_seconds || act.duration_seconds)}</div><div class="metric-sub">Totalt ${fmtDuration(act.duration_seconds)}${act.moving_time_seconds ? '' : ' · timer saknas'}</div></div>
+      ${isRun ? `<div class="metric"><div class="metric-label">Tempo</div><div class="metric-value" style="font-size:20px">${pace}<span class="metric-unit">/km</span></div><div class="metric-sub">Aktiv timer i första hand</div></div>` : ''}
+      ${act.avg_hr ? `<div class="metric"><div class="metric-label">Snittpuls</div><div class="metric-value">${act.avg_hr}<span class="metric-unit"> bpm</span></div><div class="metric-sub">max ${act.max_hr||'–'} bpm</div></div>` : ''}
       ${act.elevation_gain_meters ? `<div class="metric"><div class="metric-label">Höjdmeter</div><div class="metric-value">+${Math.round(act.elevation_gain_meters)}<span class="metric-unit"> m</span></div></div>` : ''}
     </div>
 
+    <section class="card" id="activity-tags"></section>
     <!-- Tabs -->
     <div class="tabs">
       ${isRun ? '<button class="tab-btn active" onclick="switchTab(\'splits\',this)">Km-splits</button>' : ''}
       ${laps.length ? '<button class="tab-btn' + (isRun?'':' active') + '" onclick="switchTab(\'laps\',this)">Laps</button>' : ''}
-      ${act.avg_hr ? '<button class="tab-btn" onclick="switchTab(\'zones\',this)">HR-zoner</button>' : ''}
+      ${act.avg_hr ? '<button class="tab-btn" onclick="switchTab(\'zones\',this)">Pulszoner</button>' : ''}
       <button class="tab-btn" onclick="switchTab(\'charts\',this)">Grafer</button>
       <button class="tab-btn" onclick="switchTab(\'info\',this)">Info</button>
     </div>
@@ -106,7 +112,7 @@ function render(act, laps, splits) {
     ${act.avg_hr ? `
     <div id="tab-zones" class="tab-panel">
       <div class="card">
-        <div class="card-header"><span class="card-title">HR-zonsfördelning</span><span style="font-size:12px;color:var(--text3)">Karvonen: vila ${hrCfg.rest} bpm · max ${hrCfg.max} bpm</span></div>
+        <div class="card-header"><span class="card-title">Pulszonsfördelning</span><span style="font-size:12px;color:var(--text3)">Karvonen: vila ${hrCfg.rest} bpm · max ${hrCfg.max} bpm</span></div>
         <div id="zone-bars">Laddar...</div>
       </div>
     </div>` : ''}
@@ -114,8 +120,8 @@ function render(act, laps, splits) {
     <!-- Charts tab -->
     <div id="tab-charts" class="tab-panel">
       <div class="card">
-        <div class="card-header"><span class="card-title">Pace & elevation</span></div>
-        <div style="position:relative;height:220px"><canvas id="chart-pace-elev" role="img" aria-label="Pace och elevation över tid">Laddar...</canvas></div>
+        <div class="card-header"><span class="card-title">Tempo och höjd</span></div>
+        <div style="position:relative;height:220px"><canvas id="chart-pace-elev" role="img" aria-label="Tempo och höjd över tid">Laddar...</canvas></div>
       </div>
       <div class="card">
         <div class="card-header"><span class="card-title">Puls över tid</span></div>
@@ -123,8 +129,8 @@ function render(act, laps, splits) {
       </div>
       ${isRun&&splits.length ? `
       <div class="card">
-        <div class="card-header"><span class="card-title">Pace per km</span></div>
-        <div style="position:relative;height:180px"><canvas id="chart-splits" role="img" aria-label="Pace per km">Laddar...</canvas></div>
+        <div class="card-header"><span class="card-title">Tempo per km</span></div>
+        <div style="position:relative;height:180px"><canvas id="chart-splits" role="img" aria-label="Tempo per km">Laddar...</canvas></div>
       </div>` : ''}
     </div>
 
@@ -138,17 +144,17 @@ function render(act, laps, splits) {
             ['Typ', typeLabel(act.activity_type)],
             ['Distans', act.distance_meters ? (act.distance_meters/1000).toFixed(3)+' km' : '–'],
             ['Total tid', fmtDuration(act.duration_seconds)],
-            ['Rörlig tid', fmtDuration(act.moving_time_seconds)],
-            ['Snitt pace', isRun ? pace+'/km' : '–'],
-            ['Snitt HR', act.avg_hr ? act.avg_hr+' bpm' : '–'],
-            ['Max HR', act.max_hr ? act.max_hr+' bpm' : '–'],
+            ['Tid med aktiv timer', fmtDuration(act.moving_time_seconds)],
+            ['Snittempo', isRun ? pace+'/km' : '–'],
+            ['Snittpuls', act.avg_hr ? act.avg_hr+' bpm' : '–'],
+            ['Maxpuls', act.max_hr ? act.max_hr+' bpm' : '–'],
             ['Snitt kadens', act.avg_cadence ? act.avg_cadence+' spm' : '–'],
             ['Höjdmeter upp', act.elevation_gain_meters ? '+'+Math.round(act.elevation_gain_meters)+' m' : '–'],
             ['Höjdmeter ned', act.elevation_loss_meters ? '-'+Math.round(act.elevation_loss_meters)+' m' : '–'],
             ['Kalorier', act.calories ? act.calories+' kcal' : '–'],
             ['Källa', act.filename || 'Manuell inmatning'],
             ['Notat', act.notes || '–']
-          ].map(([k,v])=>`<tr><td style="padding:8px 0;color:var(--text2);width:40%;border-bottom:0.5px solid var(--border)">${k}</td><td style="padding:8px 0;border-bottom:0.5px solid var(--border)">${v}</td></tr>`).join('')}
+          ].map(([k,v])=>`<tr><td style="padding:8px 0;color:var(--text2);width:40%;border-bottom:0.5px solid var(--border)">${escapeHtml(k)}</td><td style="padding:8px 0;border-bottom:0.5px solid var(--border)">${escapeHtml(String(v))}</td></tr>`).join('')}
         </table>
       </div>
     </div>
@@ -170,8 +176,8 @@ function renderSplitsTable(splits) {
   return `<div class="card" style="overflow-x:auto">
     <table class="splits-table">
       <thead><tr>
-        <th>Km</th><th>Pace</th><th style="min-width:120px">Visualisering</th>
-        <th>HR</th><th>Zon</th><th>Kadens</th><th>Distans</th>
+        <th>Km</th><th>Tempo</th><th style="min-width:120px">Visualisering</th>
+        <th>Puls</th><th>Zon</th><th>Kadens</th><th>Distans</th>
       </tr></thead>
       <tbody>
         ${splits.map(s => {
@@ -197,9 +203,9 @@ function renderLapsTable(laps, isRun) {
   return `<div class="card" style="overflow-x:auto">
     <table class="splits-table">
       <thead><tr>
-        <th>Lap</th><th>Distans</th><th>Tid</th>
-        ${isRun ? '<th>Pace</th>' : ''}
-        <th>HR</th><th>Zon</th><th>Kadens</th>
+        <th>Varv</th><th>Distans</th><th>Timer / totalt</th>
+        ${isRun ? '<th>Tempo</th>' : ''}
+        <th>Puls</th><th>Zon</th><th>Kadens</th>
       </tr></thead>
       <tbody>
         ${laps.map(l => {
@@ -207,7 +213,7 @@ function renderLapsTable(laps, isRun) {
           return `<tr>
             <td><strong>${l.lap_index}</strong></td>
             <td>${(l.distance_meters/1000).toFixed(3)} km</td>
-            <td>${fmtDuration(l.duration_seconds)}</td>
+            <td>${l.moving_duration_seconds ? fmtDuration(l.moving_duration_seconds) : '–'} / ${fmtDuration(l.duration_seconds)}</td>
             ${isRun ? `<td><strong>${fmtPace(l.avg_pace_sec_per_km)}</strong>/km</td>` : ''}
             <td>${l.avg_hr ? l.avg_hr+' bpm' : '–'}</td>
             <td>${z ? `<span class="zone-badge z${z.num}">Z${z.num}</span>` : '–'}</td>
@@ -219,30 +225,72 @@ function renderLapsTable(laps, isRun) {
   </div>`;
 }
 
+function renderActivityTags(act) {
+  const tag = TrainingProfile.get().activityTags[act.id] || {};
+  const option = (value, label, selected) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`;
+  document.getElementById('activity-tags').innerHTML = `
+    <h2 class="card-title">Gör passet lättare att jämföra</h2>
+    <p class="muted">Valfritt. Test och tävling använder totaltiden när resultatet jämförs med ditt mål.</p>
+    <form id="tag-form" class="form-grid">
+      <label>Passets syfte<select id="tag-kind">${[['other','Ej markerat'],['easy','Lugn distans'],['test','Testlopp'],['race','Tävling']].map(([v,l]) => option(v,l,tag.kind || 'other')).join('')}</select></label>
+      <label>Underlag<select id="tag-surface">${[['unknown','Inte angivet'],['road','Väg / bana'],['trail','Terräng'],['treadmill','Löpband']].map(([v,l]) => option(v,l,tag.surface || 'unknown')).join('')}</select></label>
+      <label>Jämförelserunda<input id="tag-route" maxlength="80" placeholder="Till exempel min flacka runda" value="${escapeHtml(tag.route || '')}"></label>
+      <label>Aktivitetstyp<select id="activity-type-edit">${[['running','Löpning'],['strength','Styrketräning'],['hiking','Vandring'],['cycling','Cykling'],['swimming','Simning'],['unknown','Annan aktivitet']].map(([v,l]) => option(v,l,act.activity_type)).join('')}</select></label>
+      ${act.activity_type === 'strength' ? `<fieldset class="full-width"><legend>Styrkeutveckling (valfritt)</legend><p class="muted">Registrera ett jämförbart arbetsset i en övning. Samma övning, belastning och repetitioner kan följas på startsidan.</p><div class="form-grid"><label>Övning<input id="strength-exercise" maxlength="80" value="${escapeHtml(tag.strength?.exercise || '')}"></label><label>Belastning (kg)<input id="strength-weight" type="number" min="0" max="1000" step="0.5" value="${escapeHtml(String(tag.strength?.weightKg ?? ''))}"></label><label>Repetitioner<input id="strength-reps" type="number" min="1" max="200" value="${escapeHtml(String(tag.strength?.reps ?? ''))}"></label></div></fieldset>` : ''}
+      <div class="full-width"><button class="btn" type="submit">Spara passuppgifter</button> <span id="tag-status" role="status" class="muted"></span></div>
+    </form>`;
+  document.getElementById('tag-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const message = document.getElementById('tag-status');
+    try {
+      const next = { ...tag, kind: document.getElementById('tag-kind').value, surface: document.getElementById('tag-surface').value, route: document.getElementById('tag-route').value.trim() };
+      if (document.getElementById('strength-exercise')) {
+        const exercise = document.getElementById('strength-exercise').value.trim();
+        const weight = document.getElementById('strength-weight').value;
+        const reps = document.getElementById('strength-reps').value;
+        if (exercise && (weight === '' || reps === '')) throw new Error('Ange både belastning och repetitioner för arbetssetet.');
+        next.strength = exercise ? { exercise, weightKg: Number(weight), reps: Number(reps) } : null;
+      }
+      const type = document.getElementById('activity-type-edit').value;
+      if (type !== act.activity_type) {
+        await dbQuery(`activities?id=eq.${encodeURIComponent(act.id)}`, { method: 'PATCH', body: JSON.stringify({ activity_type: type }) });
+        act.activity_type = type;
+      }
+      const result = await TrainingProfile.save({ activityTags: { [act.id]: next } });
+      message.textContent = result.status + ' Öppna passet igen om du ändrade aktivitetstyp.';
+    } catch (error) { message.textContent = error.message; }
+  });
+}
+
 function renderZoneBars(act) {
-  const { zones, max } = getHRConfig();
-  // Approximate zone time from laps or splits if available
   const el = document.getElementById('zone-bars');
   if (!el) return;
-  // Show static zone reference with avg HR marker
-  const avgHR = act.avg_hr || 0;
-  const avgZone = avgHR ? hrZone(avgHR) : null;
+  const snapshot = act.hr_zone_config;
+  const recorded = act.hr_zone_seconds;
+  const { zones, max } = snapshot?.zones?.length ? snapshot : getHRConfig();
+  const total = recorded ? Object.values(recorded).reduce((s,v) => s + (Number(v) || 0), 0) : 0;
+  if (!total) {
+    el.innerHTML = `<p class="muted">Exakt zonfördelning är inte sparad för det här passet. Snittpulsen ${act.avg_hr ? escValue(act.avg_hr) + ' bpm' : 'saknas'} räcker inte för att visa hur länge du tränade i varje zon.</p><p class="muted">Nya importer beräknar zonminuter från originalfilens tidsstämplade puls. Äldre filer kan importeras igen för att komplettera underlaget.</p>`;
+    return;
+  }
   el.innerHTML = zones.map(z => {
-    const inZone = avgZone && avgZone.num === z.num;
+    const seconds = Number(recorded[String(z.num)]) || 0;
+    const pct = seconds / total * 100;
     return `<div class="zone-row">
       <div class="zone-label"><span class="zone-badge z${z.num}">Z${z.num}</span></div>
       <div style="flex:1">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:3px">${z.name} · ${Math.round(z.min)}–${z.max===Infinity?max:Math.round(z.max)} bpm · ${z.label}</div>
-        <div class="zone-bar-wrap"><div class="zone-bar-inner" style="width:${inZone?'60':'15'}%;background:${z.color}"></div></div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:3px">${escapeHtml(z.name)} · ${Math.round(z.min)}–${z.max == null || z.max === Infinity ? max : Math.round(z.max)} bpm</div>
+        <div class="zone-bar-wrap"><div class="zone-bar-inner" style="width:${pct}%;background:var(--z${z.num}t)"></div></div>
       </div>
-      ${inZone ? `<span style="font-size:12px;color:var(--text2)">snitt ${avgHR} bpm</span>` : '<span></span>'}
+      <span style="font-size:12px;color:var(--text2)">${Math.round(seconds / 60)} min · ${Math.round(pct)}%</span>
     </div>`;
-  }).join('') + `<p style="font-size:12px;color:var(--text3);margin-top:1rem">Exakt zonstid kräver per-sekund-data från FIT-fil. Ovan visar var ditt snitt-HR hamnar.</p>`;
+  }).join('') + `<p class="muted">${Math.round(total / 60)} minuter med täckt pulsunderlag av ${Math.round((act.moving_time_seconds || act.duration_seconds) / 60)} timerminuter. Luckor och pauser räknas inte som mätt zonstid. Gränserna sparades vid import: vilopuls ${snapshot?.rest ?? '–'}, maxpuls ${snapshot?.max ?? '–'} bpm.</p>`;
 }
+function escValue(value) { return escapeHtml(String(value)); }
 
 async function loadTimeSeries(actId, splits) {
   try {
-    const ts = await dbQuery(`time_series?activity_id=eq.${actId}&order=t.asc`);
+    const ts = await dbQueryAll(`time_series?activity_id=eq.${actId}&order=t.asc,id.asc`);
     if (ts && ts.length) renderTimeSeriesCharts(ts, splits);
   } catch(e) { console.log('No time series data', e); }
 }

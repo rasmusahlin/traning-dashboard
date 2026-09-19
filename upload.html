@@ -13,11 +13,10 @@
     <span class="nav-brand">Träningsdashboard</span>
     <div class="nav-links">
       <a href="index.html">Översikt</a>
-      <a href="analysis.html">Analys</a>
-      <a href="planning.html">Planering</a>
-      <a href="plan/">Plan</a>
-      <a href="upload.html" class="active">Ladda upp</a>
-      <a href="settings.html">Inställningar</a>
+      <a href="analysis.html">Utveckling</a>
+      <a href="plan/">Min plan</a>
+      <a href="upload.html" class="active" aria-current="page">Importera</a>
+      <a href="settings.html">Mål &amp; inställningar</a>
     </div>
   </div>
 </nav>
@@ -40,11 +39,18 @@
   </div>
 
   <div class="card">
-    <div class="upload-zone" id="drop-zone" onclick="document.getElementById('fit-input').click()">
+    <div class="card-header"><span class="card-title">Lokalt originalarkiv</span></div>
+    <p style="font-size:13px;color:var(--text2);margin:0 0 10px">Originala FIT-filer sparas lokalt i denna webbläsare så att de kan exporteras igen.</p>
+    <button class="btn" type="button" onclick="exportOriginals()">Exportera sparade original</button>
+    <span id="archive-status" style="font-size:13px;color:var(--text2);margin-left:8px"></span>
+  </div>
+
+  <div class="card">
+    <div class="upload-zone" id="drop-zone" role="button" tabindex="0" aria-controls="fit-input" aria-label="Välj FIT- eller ZIP-filer" onclick="document.getElementById('fit-input').click()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('fit-input').click();}">
       <div class="upload-icon">↑</div>
       <div class="upload-title">Dra och släpp FIT-fil här</div>
-      <div class="upload-sub">Eller klicka för att välja en eller flera .fit-filer</div>
-      <input type="file" id="fit-input" accept=".fit" multiple style="display:none" onchange="handleFiles(this.files)">
+      <div class="upload-sub">Eller klicka för att välja en eller flera .fit- eller .zip-filer</div>
+      <input type="file" id="fit-input" accept=".fit,.zip" multiple style="display:none" onchange="handleFiles(this.files)">
     </div>
     <div id="upload-state" style="display:none;margin-top:1rem">
       <div id="progress-msg" style="font-size:14px;color:var(--text2);margin-bottom:1rem"></div>
@@ -82,9 +88,12 @@
 <div id="toast" class="toast"></div>
 
 <script src="js/db.js"></script>
+<script src="js/profile.js"></script>
 <script src="js/fitparser-bundle.min.js"></script>
+<script src="js/fit-parser.js"></script>
+<script src="js/zip-reader.js"></script>
 <script>
-document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+document.getElementById('f-date').value = FitImport.localDateString(new Date());
 
 const dz = document.getElementById('drop-zone');
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
@@ -96,146 +105,127 @@ function num(v)  { var x = parseFloat(v); return isFinite(x) ? x : null; }
 function numi(v) { var x = parseFloat(v); return isFinite(x) ? Math.round(x) : null; }
 function avg(arr) { return arr.length ? Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length) : null; }
 
-// ── FIT parser ─────────────────────────────────────────────────────────────
-function parseFitFile(file) {
-  return new Promise(function(resolve, reject) {
-    if (typeof FitParser === 'undefined') {
-      reject(new Error('FitParser saknas – kontrollera att js/fitparser-bundle.min.js finns i repot.'));
-      return;
-    }
-    var reader = new FileReader();
-    reader.onerror = function() { reject(new Error('Kunde inte läsa filen.')); };
-    reader.onload = function(e) {
-      try {
-        var parser = new FitParser({ force:true, speedUnit:'km/h', lengthUnit:'m', temperatureUnit:'celsius', elapsedRecordField:true, mode:'list' });
-        parser.parse(e.target.result, function(error, data) {
-          if (error) { reject(new Error('FIT-parsningsfel: ' + error)); return; }
-          try { resolve(processFitData(data, file.name)); } catch(pe) { reject(pe); }
-        });
-      } catch(err) { reject(err); }
-    };
-    reader.readAsArrayBuffer(file);
-  });
-}
-
-function detectActivityType(session, data) {
-  var sport = (session.sport || '').toLowerCase();
-  var sub   = (session.sub_sport || '').toLowerCase();
-  // Explicit strength signals
-  if (sport.includes('strength') || sport.includes('training') || sub.includes('strength') ||
-      sport.includes('gym') || sub.includes('gym') || sport.includes('cardio') ||
-      (data.sets && data.sets.length > 0)) return 'strength';
-  if (sport.includes('run')) return 'running';
-  if (sport.includes('walk') || sport.includes('hik')) return 'hiking';
-  // Fallback: no GPS distance = likely strength
-  var dist = parseFloat(session.total_distance);
-  if (!isFinite(dist) || dist < 100) return 'strength';
-  return 'hiking';
-}
-
-function processFitData(data, filename) {
-  var session = (data.sessions && data.sessions[0]) || {};
-  var laps    = data.laps    || [];
-  var records = data.records || [];
-  var actType = detectActivityType(session, data);
-  var startTime = session.start_time ? new Date(session.start_time) : new Date();
-
-  var summary = {
-    activity_date:         startTime.toISOString().slice(0, 10),
-    activity_type:         actType,
-    sport_raw:             String(session.sport || ''),
-    distance_meters:       actType === 'strength' ? null : num(session.total_distance),
-    duration_seconds:      num(session.total_elapsed_time),
-    moving_time_seconds:   num(session.total_timer_time),
-    avg_hr:                numi(session.avg_heart_rate),
-    max_hr:                numi(session.max_heart_rate),
-    avg_cadence:           actType === 'running' && session.avg_running_cadence ? numi(session.avg_running_cadence * 2) : null,
-    avg_speed_ms:          actType !== 'strength' && session.avg_speed ? num(session.avg_speed / 3.6) : null,
-    max_speed_ms:          actType !== 'strength' && session.max_speed ? num(session.max_speed / 3.6) : null,
-    elevation_gain_meters: actType !== 'strength' ? num(session.total_ascent) : null,
-    elevation_loss_meters: actType !== 'strength' ? num(session.total_descent) : null,
-    calories:              numi(session.total_calories),
-    filename:              filename,
-    notes:                 null
-  };
-
-  var processedLaps = laps.map(function(lap, i) {
-    return {
-      lap_index:           i + 1,
-      start_time:          lap.start_time ? new Date(lap.start_time).toISOString() : null,
-      distance_meters:     num(lap.total_distance),
-      duration_seconds:    num(lap.total_elapsed_time),
-      avg_hr:              numi(lap.avg_heart_rate),
-      max_hr:              numi(lap.max_heart_rate),
-      avg_pace_sec_per_km: actType === 'running' && lap.avg_speed ? num(3600 / lap.avg_speed) : null,
-      avg_cadence:         actType === 'running' && lap.avg_running_cadence ? numi(lap.avg_running_cadence * 2) : null,
-      elevation_gain:      num(lap.total_ascent),
-      calories:            numi(lap.total_calories),
-      lap_trigger:         String(lap.lap_trigger || 'manual')
-    };
-  });
-
-  var kmSplits  = actType === 'running' ? buildKmSplits(records) : [];
-  var timeSeries = buildTimeSeries(records);
-
-  return { summary:summary, laps:processedLaps, kmSplits:kmSplits, timeSeries:timeSeries };
-}
-
-function buildKmSplits(records) {
-  if (!records.length) return [];
-  var splits = [], splitStartTime = 0, splitStartDist = 0;
-  var hrVals = [], cadVals = [], altVals = [];
-  records.forEach(function(r) {
-    var dist = r.distance || 0, time = r.elapsed_time || 0;
-    if (r.heart_rate) hrVals.push(r.heart_rate);
-    if (r.cadence)    cadVals.push(r.cadence * 2);
-    if (r.altitude)   altVals.push(r.altitude);
-    var km = Math.floor(dist / 1000), prevKm = Math.floor(splitStartDist / 1000);
-    if (km > prevKm && dist > 0) {
-      var sd = dist - splitStartDist, st = time - splitStartTime;
-      splits.push({ km:km, distance_meters:num(sd), duration_seconds:num(st),
-        pace_sec_per_km:sd > 0 ? num(st / (sd/1000)) : null,
-        avg_hr:avg(hrVals), avg_cadence:avg(cadVals),
-        elevation_gain:altVals.length > 1 ? num(Math.max(0, altVals[altVals.length-1]-altVals[0])) : null,
-        partial:false });
-      splitStartTime = time; splitStartDist = dist;
-      hrVals = []; cadVals = []; altVals = [];
-    }
-  });
-  var last = records[records.length-1] || {}, rem = (last.distance||0) - splitStartDist;
-  if (rem > 100) {
-    var st = (last.elapsed_time||0) - splitStartTime;
-    splits.push({ km:Math.ceil((last.distance||0)/1000), distance_meters:num(rem),
-      duration_seconds:num(st), pace_sec_per_km:num(st/(rem/1000)),
-      avg_hr:avg(hrVals), avg_cadence:avg(cadVals), elevation_gain:null, partial:true });
-  }
-  return splits;
-}
-
-function buildTimeSeries(records) {
-  if (!records.length) return [];
-  var step = Math.max(1, Math.floor(records.length / 500));
-  return records.filter(function(_,i){return i%step===0;}).map(function(r) {
-    return { t:num(r.elapsed_time)||0, d:num(r.distance)||0, hr:numi(r.heart_rate),
-             alt:num(r.altitude), speed:r.speed?num(r.speed/3.6):null, cadence:r.cadence?numi(r.cadence*2):null };
-  });
-}
+// Canonical parser; no upload-specific FIT calculations are kept in this page.
+var parseFitFile = FitImport.parseFitFile;
 
 // ── Batch upload state ─────────────────────────────────────────────────────
 var batchQueue = [];
 var batchResults = { ok:0, skip:0, errors:[] };
+var archiveDbPromise = null;
+
+function readBytes(file) {
+  if (file && typeof file.arrayBuffer === 'function') return file.arrayBuffer().then(function (b) { return new Uint8Array(b); });
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onerror = function () { reject(new Error('Kunde inte läsa filen.')); };
+    reader.onload = function () { resolve(new Uint8Array(reader.result)); };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function sha256Hex(bytes) {
+  if (!window.crypto || !window.crypto.subtle) throw new Error('Webbläsaren saknar säker SHA-256-hashning.');
+  var digest = await window.crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+}
+
+function archiveOwnerKey() {
+  try {
+    var session = JSON.parse(localStorage.getItem('training_dashboard_auth_session') || 'null');
+    if (session && session.user && session.user.id) return String(session.user.id);
+  } catch (e) {}
+  throw new Error('Logga in innan lokala original sparas eller exporteras.');
+}
+
+function idbRequest(request) {
+  return new Promise(function (resolve, reject) {
+    request.onsuccess = function () { resolve(request.result); };
+    request.onerror = function () { reject(request.error || new Error('Lokalt originalarkiv kunde inte öppnas.')); };
+  });
+}
+
+function archiveDb() {
+  if (archiveDbPromise) return archiveDbPromise;
+  archiveDbPromise = new Promise(function (resolve, reject) {
+    if (!window.indexedDB) { reject(new Error('Webbläsaren saknar IndexedDB för lokalt originalarkiv.')); return; }
+    var request = indexedDB.open('training-dashboard-originals-v1', 1);
+    request.onupgradeneeded = function () {
+      if (!request.result.objectStoreNames.contains('fits')) request.result.createObjectStore('fits', { keyPath: 'id' });
+    };
+    request.onsuccess = function () { resolve(request.result); };
+    request.onerror = function () { reject(request.error || new Error('Lokalt originalarkiv kunde inte öppnas.')); };
+  });
+  return archiveDbPromise;
+}
+
+async function saveOriginalFitLocal(bytes, metadata) {
+  var db = await archiveDb();
+  var owner = archiveOwnerKey();
+  var row = Object.assign({}, metadata, { id: owner + ':' + metadata.source_hash, owner_key: owner, bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), saved_at: new Date().toISOString() });
+  await idbRequest(db.transaction('fits', 'readwrite').objectStore('fits').put(row));
+}
+
+async function listOriginalFits() {
+  var db = await archiveDb();
+  var rows = await idbRequest(db.transaction('fits', 'readonly').objectStore('fits').getAll());
+  return rows.filter(function (row) { return row.owner_key === archiveOwnerKey(); });
+}
+
+async function exportOriginals() {
+  var status = document.getElementById('archive-status');
+  try {
+    var rows = await listOriginalFits();
+    if (!rows.length) { status.textContent = 'Inga lokala original sparade.'; return; }
+    rows.forEach(function (row, index) {
+      setTimeout(function () {
+        var link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([row.bytes], { type: 'application/octet-stream' }));
+        link.download = row.filename || ('activity-' + row.source_hash + '.fit');
+        link.click();
+        setTimeout(function () { URL.revokeObjectURL(link.href); }, 5000);
+      }, index * 150);
+    });
+    status.textContent = rows.length + ' original exporterade.';
+  } catch (e) { status.textContent = 'Exportfel: ' + e.message; }
+}
+
+function parserOptions() {
+  var cfg = typeof getHRConfig === 'function' ? getHRConfig() : { max: 190, rest: 60 };
+  return { hrConfig: { max: cfg.max, rest: cfg.rest }, maxChartPoints: 500, speedUnit: 'km/h' };
+}
+
+async function expandInputFiles(files) {
+  var items = [];
+  for (var i = 0; i < files.length; i++) {
+    var file = files[i], name = file.name || 'activity.fit', bytes = await readBytes(file);
+    if (name.toLowerCase().endsWith('.zip')) {
+      var nested = await ZipReader.readFitFiles(bytes);
+      nested.forEach(function (entry) { items.push({ name: entry.name, bytes: entry.bytes }); });
+    } else {
+      items.push({ name: name, bytes: bytes });
+    }
+  }
+  if (!items.length) throw new Error('Inga FIT-filer hittades i urvalet.');
+  return items;
+}
+
+async function parseQueueItem(item) {
+  var parsed = await FitImport.parseFitBuffer(item.bytes, item.name, parserOptions());
+  parsed.summary.source_hash = await sha256Hex(item.bytes);
+  return parsed;
+}
 
 async function handleFiles(files) {
   if (!files || !files.length) return;
-  batchQueue = Array.from(files);
-  batchResults = { ok:0, skip:0, errors:[] };
-
-  var state   = document.getElementById('upload-state');
+  var state = document.getElementById('upload-state');
   var actions = document.getElementById('upload-actions');
-  state.style.display   = 'block';
+  state.style.display = 'block';
   actions.style.display = 'none';
-
   var msg = document.getElementById('progress-msg');
+  msg.textContent = 'Läser FIT-filer...';
+  try { batchQueue = await expandInputFiles(Array.from(files)); }
+  catch (e) { msg.textContent = 'Fel: ' + e.message; return; }
+  batchResults = { ok:0, skip:0, errors:[] };
   msg.textContent = batchQueue.length + ' fil(er) valda...';
 
   if (batchQueue.length === 1) {
@@ -252,17 +242,18 @@ async function handleFiles(files) {
   }
 }
 
-async function handleSinglePreview(file) {
+async function handleSinglePreview(item) {
   var msg     = document.getElementById('progress-msg');
   var preview = document.getElementById('preview-content');
   var actions = document.getElementById('upload-actions');
-  msg.textContent = 'Läser ' + file.name + '...';
+  msg.textContent = 'Läser ' + item.name + '...';
   preview.innerHTML = '';
   try {
-    var pd = await parseFitFile(file);
+    var pd = await parseQueueItem(item);
     var s = pd.summary;
     var isRun = s.activity_type === 'running';
-    var pace = isRun && s.duration_seconds && s.distance_meters ? fmtPace(s.duration_seconds / (s.distance_meters / 1000)) : null;
+    var paceSeconds = s.timer_duration_seconds || s.moving_time_seconds || s.duration_seconds;
+    var pace = isRun && paceSeconds && s.distance_meters ? fmtPace(paceSeconds / (s.distance_meters / 1000)) : null;
     msg.textContent = 'Pass inläst – ' + fmtDate(s.activity_date) + ' · ' + typeLabel(s.activity_type);
     preview.innerHTML =
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem">' +
@@ -283,7 +274,7 @@ async function handleSinglePreview(file) {
       '<button class="btn btn-primary" onclick="saveSingle(' + JSON.stringify(null) + ')">Spara till dashboard</button>' +
       '<button class="btn" onclick="document.getElementById(\'upload-state\').style.display=\'none\'">Avbryt</button>';
     // Store for save
-    window._pendingSingle = pd;
+    window._pendingSingle = { parsed: pd, item: item };
   } catch(e) {
     document.getElementById('progress-msg').textContent = 'Fel: ' + e.message;
     console.error(e);
@@ -291,12 +282,13 @@ async function handleSinglePreview(file) {
 }
 
 async function saveSingle() {
-  var pd = window._pendingSingle;
-  if (!pd) return;
+  var pending = window._pendingSingle;
+  if (!pending) return;
   var btn = document.querySelector('#upload-actions .btn-primary');
   btn.textContent = 'Sparar...'; btn.disabled = true;
   try {
-    await saveOneParsed(pd);
+    var result = await saveOneParsed(pending.parsed, pending.item);
+    if (result.status === 'duplicate') { toast('Passet fanns redan – originalet sparades lokalt.'); btn.disabled = false; return; }
     toast('Pass sparat!');
     setTimeout(function() { location.href = 'index.html'; }, 1000);
   } catch(e) {
@@ -313,14 +305,15 @@ async function runBatchImport() {
     var file = batchQueue[i];
     var pct  = Math.round(((i) / total) * 100);
     msg.innerHTML =
-      '<div style="margin-bottom:8px">Importerar ' + (i+1) + ' / ' + total + ' &nbsp;·&nbsp; ' + file.name + '</div>' +
+      '<div style="margin-bottom:8px">Importerar ' + (i+1) + ' / ' + total + ' &nbsp;·&nbsp; ' + escapeHtml(file.name) + '</div>' +
       '<div style="background:var(--surface2);border-radius:4px;height:6px;width:100%">' +
         '<div style="background:#185FA5;height:6px;border-radius:4px;width:' + pct + '%;transition:width 0.2s"></div>' +
       '</div>';
     try {
-      var pd = await parseFitFile(file);
-      await saveOneParsed(pd);
-      batchResults.ok++;
+      var pd = await parseQueueItem(file);
+      var result = await saveOneParsed(pd, file);
+      if (result.status === 'duplicate') batchResults.skip++;
+      else batchResults.ok++;
     } catch(e) {
       batchResults.errors.push(file.name + ': ' + e.message);
       batchResults.skip++;
@@ -340,50 +333,74 @@ async function runBatchImport() {
       '<div class="metric"><div class="metric-label">Hoppade över</div><div class="metric-value">' + batchResults.skip + '</div></div>' +
       '<div class="metric"><div class="metric-label">Totalt</div><div class="metric-value">' + total + '</div></div>' +
     '</div>' +
-    (batchResults.errors.length ? '<div style="margin-top:1rem;font-size:12px;color:var(--text3)">' + batchResults.errors.slice(0,5).join('<br>') + '</div>' : '');
+    (batchResults.errors.length ? '<div style="margin-top:1rem;font-size:12px;color:var(--text3)">' + batchResults.errors.slice(0,5).map(escapeHtml).join('<br>') + '</div>' : '');
 
   var actions = document.getElementById('upload-actions');
   actions.style.display = 'flex';
   actions.innerHTML = '<a href="index.html" class="btn btn-primary">Gå till översikten</a>';
 }
 
-async function saveOneParsed(pd) {
-  var saved = await dbInsert('activities', pd.summary);
-  var actId = Array.isArray(saved) ? saved[0].id : saved.id;
-  if (pd.laps.length)
-    await dbInsert('laps', pd.laps.map(function(l){return Object.assign({},l,{activity_id:actId});}));
-  if (pd.kmSplits.length)
-    await dbInsert('km_splits', pd.kmSplits.map(function(s){return Object.assign({},s,{activity_id:actId});}));
-  if (pd.timeSeries.length) {
-    var step = Math.max(1, Math.floor(pd.timeSeries.length / 500));
-    var sampled = pd.timeSeries.filter(function(_,i){return i%step===0;});
-    await dbInsert('time_series', sampled.map(function(p){return Object.assign({},p,{activity_id:actId});}));
+async function saveOneParsed(pd, item) {
+  if (!pd || !pd.summary || !pd.summary.source_hash) throw new Error('FIT-filen saknar SHA-256-identitet.');
+  await saveOriginalFitLocal(item.bytes, { source_hash: pd.summary.source_hash, filename: item.name, source_identity: pd.summary.source_identity, started_at: pd.summary.started_at });
+  var body;
+  try {
+    body = await dbQuery('rpc/import_activity_atomic', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_activity: pd.summary,
+        p_laps: pd.laps || [],
+        p_km_splits: pd.kmSplits || [],
+        p_time_series: pd.timeSeries || []
+      })
+    });
+  } catch (e) {
+    var raw = String(e && e.message || e);
+    if (/404|not found|PGRST202|import_activity_atomic/i.test(raw)) {
+      throw new Error('Importmigration 003 saknas eller är inte aktiv. Kör 003_activity_import.sql först; ingen delvis import sparades.');
+    }
+    throw e;
   }
-  return actId;
+  var result = Array.isArray(body) ? body[0] : body;
+  if (result && result.status === 'review') throw new Error('Flera äldre pass matchar underlaget. Ingen ny import skapades; granska dem först.');
+  if (!result || !result.activity_id) throw new Error('Importen gav inget aktivitets-ID.');
+  return result;
 }
 
 function parseManualDuration(s) {
-  if (!s) return null;
-  var parts = s.split(':');
-  if (parts.length === 3) return +parts[0]*3600 + +parts[1]*60 + +parts[2];
-  if (parts.length === 2) return +parts[0]*60 + +parts[1];
-  return +s * 60;
+  if (!String(s || '').trim()) return null;
+  var parts = String(s).trim().split(':').map(Number);
+  if (parts.some(function (n) { return !Number.isFinite(n) || n < 0; })) return null;
+  if (parts.length === 3 && parts[1] < 60 && parts[2] < 60) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2 && parts[1] < 60) return parts[0] * 60 + parts[1];
+  if (parts.length === 1) return parts[0] * 60;
+  return null;
+}
+
+function manualNumber(id, label, min, max) {
+  var raw = document.getElementById(id).value.trim();
+  if (!raw) return null;
+  var n = Number(raw);
+  if (!Number.isFinite(n) || n < min || (max !== undefined && n > max)) throw new Error(label + ' är ogiltigt.');
+  return n;
 }
 
 async function saveManual() {
-  var d = {
-    activity_date:         document.getElementById('f-date').value,
-    activity_type:         document.getElementById('f-type').value,
-    distance_meters:       +document.getElementById('f-dist').value * 1000 || null,
-    duration_seconds:      parseManualDuration(document.getElementById('f-dur').value),
-    avg_hr:                +document.getElementById('f-hr').value    || null,
-    max_hr:                +document.getElementById('f-maxhr').value  || null,
-    avg_cadence:           +document.getElementById('f-cad').value   || null,
-    elevation_gain_meters: +document.getElementById('f-elev').value  || null,
-    notes:                 document.getElementById('f-notes').value   || null
-  };
-  if (!d.activity_date) { toast('Ange datum'); return; }
   try {
+    var durationInput = document.getElementById('f-dur').value;
+    var d = {
+      activity_date:         document.getElementById('f-date').value,
+      activity_type:         document.getElementById('f-type').value,
+      distance_meters:       (manualNumber('f-dist', 'Distans', 0) || 0) * 1000 || null,
+      duration_seconds:      parseManualDuration(durationInput),
+      avg_hr:                manualNumber('f-hr', 'Snitt-HR', 30, 250),
+      max_hr:                manualNumber('f-maxhr', 'Max-HR', 30, 250),
+      avg_cadence:           manualNumber('f-cad', 'Kadens', 0, 400),
+      elevation_gain_meters: manualNumber('f-elev', 'Höjdmeter', 0),
+      notes:                 document.getElementById('f-notes').value   || null
+    };
+    if (!d.activity_date) { toast('Ange datum'); return; }
+    if (durationInput && (!d.duration_seconds || d.duration_seconds <= 0)) { toast('Ange en giltig tid'); return; }
     var saved = await dbInsert('activities', d);
     var actId = Array.isArray(saved) ? saved[0].id : saved.id;
     toast('Pass sparat!');
@@ -391,7 +408,9 @@ async function saveManual() {
   } catch(e) { toast('Fel: ' + e.message); console.error(e); }
 }
 
-startApp();
+startApp(async function () {
+  if (typeof TrainingProfile !== 'undefined' && typeof TrainingProfile.load === 'function') await TrainingProfile.load();
+});
 </script>
 </body>
 </html>
