@@ -47,6 +47,17 @@
     </section>
   </div>
 
+  <section class="card" id="z2-development">
+    <div class="card-header"><h2 class="card-title">Z2-tempoutveckling</h2><span id="z2-reference" class="muted"></span></div>
+    <p class="chart-desc" id="z2-desc"></p>
+    <div class="chart-wrap" id="z2-chart-wrap"><canvas id="chart-z2" aria-label="Tempo normaliserat till mitten av Z2, fempassnitt och trend"></canvas></div>
+    <p id="z2-summary" role="status"></p>
+    <details><summary>Hur räknas tempot?</summary>
+      <p class="chart-desc">Normaliserat tempo = faktiskt tempo × snittpuls ÷ referenspuls. Alla löppass över 2 km med snittpuls i Z2 och användbara tempodata ingår, utan krav på manuell märkning. Det är hela passets snitt, inte en analys av enbart minuter i Z2. Fempassnittet börjar efter fem pass; trendlinjen efter tre och räknas över kalenderdagar.</p>
+      <p class="chart-desc">Detta är en förenklad jämförelse vid samma puls. Terräng, väder och dagsform korrigeras inte. Ändrad vilopuls eller maxpuls i Mål &amp; inställningar räknar om både urval och referenspuls för hela historiken. Tempo följer källprioriteten ovan och kan därför skilja sig från den äldre grafens förflutna tid.</p>
+    </details>
+  </section>
+
   <section class="card"><div class="card-header"><span class="card-title">Jämförbara lugna pass</span><span id="comparable-status" class="muted"></span></div>
     <p class="chart-desc">Matchning sker på lugn tagg eller låg puls, samma kända pulszon, ungefär samma varaktighet och samma yta när den är taggad. Ingen linjär normalisering görs.</p>
     <div id="comparable-content"></div>
@@ -126,6 +137,28 @@ function renderComparison(comparison){
   charts.comparison=new Chart(document.getElementById('chart-comparison'),{type:'bar',data:{labels:['Föregående 4','Senaste 4'],datasets:[{label:'km',data:vals,backgroundColor:['rgba(24,95,165,.35)','#185FA5'],borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw.toFixed(1)} km`}}},scales:{y:{beginAtZero:true},x:{grid:{display:false}}}}});
 }
 
+function renderZ2(runs){
+  const zone=getHRConfig().zones[1];
+  const {targetHr,observations:rows}=Training.z2Pace(runs,zone);
+  document.getElementById('z2-reference').textContent=`Referenspuls ${targetHr.toFixed(1)} bpm`;
+  document.getElementById('z2-desc').textContent=`Ditt tempo omräknat till samma puls, mitten av Z2 (${zone.min.toFixed(1)}–${zone.max.toFixed(1)} bpm). Lägre min/km betyder snabbare. ${rows.length} pass ingår.`;
+  document.getElementById('z2-chart-wrap').hidden=!rows.length;
+  const latest=rows[rows.length-1];
+  document.getElementById('z2-summary').textContent=latest
+    ? `Senaste pass ${dateText(latest.date)}: ${fmtPaceLocal(latest.normalizedPace)}/km vid referenspulsen. Faktiskt ${fmtPaceLocal(latest.rawPace)}/km vid ${latest.hr} bpm.${latest.average?` Senaste fem: ${fmtPaceLocal(latest.average)}/km.`:''}`
+    : 'Inga löppass över 2 km med snittpuls i din Z2 och användbart tempo. Kontrollera pulsinställningarna och importerade pass.';
+  if(!rows.length)return;
+  const points=key=>rows.map(r=>({x:Date.parse(`${r.date}T12:00:00Z`),y:r[key]}));
+  charts.z2=new Chart(document.getElementById('chart-z2'),{type:'line',data:{datasets:[
+    {label:'Normaliserat tempo',data:points('normalizedPace'),borderColor:'rgba(29,158,117,.3)',pointBackgroundColor:'#1d9e75',pointRadius:3,borderWidth:1},
+    {label:'Fempassnitt',data:points('average'),borderColor:'#1d9e75',pointRadius:0,borderWidth:2},
+    {label:'Trend',data:points('trend'),borderColor:'#ba7517',borderDash:[4,4],pointRadius:0,borderWidth:1.5}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'},tooltip:{callbacks:{
+    title:items=>rows[items[0].dataIndex].date,
+    label:c=>c.datasetIndex===0?[`Normaliserat: ${fmtPaceLocal(c.parsed.y)}/km`,`Faktiskt: ${fmtPaceLocal(rows[c.dataIndex].rawPace)}/km vid ${rows[c.dataIndex].hr} bpm`,`Tempokälla: ${rows[c.dataIndex].source}`]:`${c.dataset.label}: ${fmtPaceLocal(c.parsed.y)}/km`
+  }}},scales:{y:{reverse:true,ticks:{callback:v=>fmtPaceLocal(v)}},x:{type:'linear',ticks:{maxTicksLimit:6,callback:v=>new Date(v).toLocaleDateString('sv-SE',{month:'short',day:'numeric',timeZone:'UTC'})}}}}});
+}
+
 function renderComparable(runs){
   const result=Training.comparableRuns(runs,profile);
   document.getElementById('comparable-status').textContent=`${result.runs.length} matchade · ${result.status==='ok'?'tillräckligt för beskrivning':result.status==='stale'?'äldre underlag':'tunt underlag'}`;
@@ -173,7 +206,7 @@ async function init(){
     const from=dates[0]||Training.addDays(to,-182);
     const weeks=Training.calendarWeeks(runs,Training.monday(from),Training.addDays(Training.monday(to),6));
     const comparison=Training.comparePeriods(runs,today);
-    setConnected(true);destroyCharts();renderQuality(runs,weeks);renderWeeks(comparison.weeks,comparison);renderPace(runs);renderComparison(comparison);renderComparable(runs);renderForecast(runs);
+    setConnected(true);destroyCharts();renderQuality(runs,weeks);renderWeeks(comparison.weeks,comparison);renderPace(runs);renderComparison(comparison);renderZ2(runs);renderComparable(runs);renderForecast(runs);
   }catch(error){setConnected(false);document.getElementById('data-summary').textContent='Kunde inte läsa analysdata';console.error(error);}
 }
 startApp(init);

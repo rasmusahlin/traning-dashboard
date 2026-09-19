@@ -6,6 +6,41 @@ const run = (date, id, extra = {}) => ({
   duration_seconds: 3000, avg_hr: 150, ...extra
 });
 
+// A slower raw pace at lower HR can represent exactly the same normalized pace.
+const z2 = Training.z2Pace([
+  run('2026-01-10', 'b', { avg_hr: 150, duration_seconds: 3000 }),
+  run('2026-01-01', 'a', { avg_hr: 140, moving_time_seconds: 45000 / 14, duration_seconds: 4000 }),
+  run('2026-01-11', 'outside', { avg_hr: 160 }),
+  run('2026-01-12', 'missing', { avg_hr: null }),
+  run('2026-01-13', 'short', { distance_meters: 2000 }),
+  run('2026-01-14', 'ride', { activity_type: 'cycling' }),
+  run('2026-02-01', 'future', { avg_hr: 145 })
+], { min: 140, max: 160 }, '2026-01-31');
+assert.equal(z2.targetHr, 150);
+assert.equal(z2.observations.length, 2);
+assert.ok(z2.observations.every(o => Math.abs(o.normalizedPace - 300) < 1e-9));
+assert.equal(z2.observations[0].source, 'timer tid');
+assert.ok(z2.observations.every(o => o.average === null && o.trend === null));
+const z2Series = Training.z2Pace([1, 2, 4, 8, 16, 24].map(day =>
+  run(`2026-01-${String(day).padStart(2, '0')}`, String(day), { duration_seconds: (350 - day) * 10 })
+), { min: 140, max: 160 }, '2026-01-31').observations;
+assert.ok(z2Series.every(o => Math.abs(o.trend - o.normalizedPace) < 1e-9), 'trend uses days, not pass index');
+assert.equal(z2Series[3].average, null);
+assert.equal(z2Series[4].average, 350 - (1 + 2 + 4 + 8 + 16) / 5);
+assert.equal(z2Series[5].average, 350 - (2 + 4 + 8 + 16 + 24) / 5);
+assert.deepEqual(Training.z2Pace([], { min: 160, max: 140 }).observations, []);
+const previousTimezone = process.env.TZ;
+try {
+  process.env.TZ = 'Europe/Stockholm';
+  const dst = Training.z2Pace([28, 29, 30].map((day, index) =>
+    run(`2026-03-${day}`, String(day), { duration_seconds: [3000, 4000, 3000][index] })
+  ), { min: 140, max: 160 }, '2026-03-31').observations;
+  assert.ok(dst.every(o => Math.abs(o.trend - 1000 / 3) < 1e-9), 'DST must not change calendar-day weights');
+} finally {
+  if (previousTimezone === undefined) delete process.env.TZ;
+  else process.env.TZ = previousTimezone;
+}
+
 assert.equal(Training.localDate('2026-06-01T23:30:00-04:00'), '2026-06-01');
 assert.equal(Training.addDays('2026-06-01', 7), '2026-06-08');
 assert.equal(Training.monday('2026-06-03'), '2026-06-01');

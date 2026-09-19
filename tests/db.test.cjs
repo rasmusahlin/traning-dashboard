@@ -56,6 +56,21 @@ test('database errors retain status while bounding backend details', async () =>
   });
 });
 
+test('pagination accepts exactly the row limit and rejects one more without truncating', async () => {
+  let count = 1000;
+  const context = vm.createContext({ URLSearchParams, console,
+    sessionStorage: { getItem: () => null }, localStorage: { getItem: () => null } });
+  vm.runInContext(source, context);
+  context.dbQuery = async path => {
+    const q = new URLSearchParams(path.split('?')[1]);
+    const offset = Number(q.get('offset')), limit = Number(q.get('limit'));
+    return Array.from({ length: Math.max(0, Math.min(limit, count - offset)) }, (_, i) => ({ id: offset + i }));
+  };
+  assert.equal((await context.dbQueryAll('activities', { maxRows: 1000 })).length, 1000);
+  count++;
+  await assert.rejects(context.dbQueryAll('activities', { maxRows: 1000 }), /säkerhetsgränsen 1000 rader/);
+});
+
 
 test('reauthentication reloads page state before exposing a different account', async () => {
   let reloaded=0, initialized=0;

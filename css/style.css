@@ -314,6 +314,10 @@ input[type=number].setting-input {
 }
 .auth-title { font-size: 18px; font-weight: 500; margin-bottom: 4px; }
 .auth-copy { font-size: 13px; color: var(--text2); margin-bottom: 1.25rem; }
+.usage-guide summary { cursor: pointer; font-weight: 500; }
+.usage-guide ol { padding-left: 1.3rem; margin: .75rem 0; }
+.usage-guide li + li { margin-top: .6rem; }
+.usage-guide p + p { margin-top: .6rem; }
 .auth-label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
 .auth-card input {
   width: 100%; padding: 9px 10px; margin-bottom: 12px;
