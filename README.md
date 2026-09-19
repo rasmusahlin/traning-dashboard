@@ -68,13 +68,13 @@ PGLITE_PATH=/absolute/path/to/node_modules/@electric-sql/pglite node --test test
 
 Testet använder en disponibel databas och syntetiska konton. Det kontrollerar migrationer, ägarskydd, felaktiga data, atomisk import och konflikter. Det ersätter inte verifiering av Supabase Auth och PostgREST i avsedd driftmiljö.
 
-## Sparat arbetsläge – publicering pågår 2026-09-19
+## Sparat arbetsläge – publicerat 2026-09-19
 
 Användaren har uttryckligen godkänt säkerhetskopia, uppdatering av ansluten Supabase-databas och publicering på befintliga GitHub Pages, inklusive efterkontroll och återställning av tidigare frontend vid fel. Mandatet gäller fortsatt; fråga inte om samma godkännande igen.
 
 - Mål: GitHub `rasmusahlin/traning-dashboard`, Pages från `main` och `/`, `https://rasmusahlin.github.io/traning-dashboard/`; Supabase `mpmtvydpiihfltldaxkt` (health Project i organisation Rasmus).
 - Före publicering verifierades remote main `a1664e26320a490fd0951aea7f330ecd71929397`. Den innehåller säkerhetsförbättringar och tidigare migrationer 003–004 som saknades i den gamla lokala basen. Dessa bevaras och förenas med nyheterna före release.
-- Arbetsgren `codex/training-insights-release`; lokal checkpoint `b6ee789` bevarar de godkända funktionerna före sammanfogningen. Sammanfogningen med origin/main är klar. Frontend är färdig för publicering på godkänt mål.
+- Arbetsgren `codex/training-insights-release`; lokal checkpoint `b6ee789` bevarar de godkända funktionerna före sammanfogningen. PR [#16](https://github.com/rasmusahlin/traning-dashboard/pull/16) är sammanfogad. Driftsatt kodrevision är `426d51b311af88cb240e45d4c90dbfa83ed152dd`; Pages-körning `35436675474` lyckades. Denna statusuppdatering sparas på releasegrenen efter publiceringen.
 - Supabase återupptogs från pausat läge. Privat gzip-backup hämtades från projektets pausbackup och integritetskontrollerades; 4 871 598 byte komprimerat, SHA-256 och metadata finns i den Git-ignorerade `.private-backups/manifest.json`. Backup får aldrig publiceras.
 - Migrationerna 005, 006 och 007 kördes framgångsrikt via Supabase SQL Editor 2026-09-19. CLI-inloggning fungerar för projektlistning men db query har en versions-/profilkonflikt; ingen ny inloggning behövs.
 - Efterkontroll: 260 aktiviteter, 2 125 varv, 1 875 km-splits, 143 659 mätpunkter och 8 planloggar, oförändrat från före uppdatering. Profil-RLS är aktivt; anon saknar rätt att köra nya import-/profilfunktioner och plan-RPC.
@@ -82,4 +82,5 @@ Användaren har uttryckligen godkänt säkerhetskopia, uppdatering av ansluten S
 - Efter sammanfogning och exportfixar passerade 67 vanliga tester och 12 PostgreSQL-tester. Oberoende granskning accepterade auth/rendering/SQL och de två exportfixarna. Dess sista fynd om historiska föreslagna veckor är rättat med regression för export/återimport och negativa datumtester. Inga implementation-workers återstår.
 - Lokal webbläsarkontroll visar översikt, enkel extrapolerad prognos, aktuell veckoplan och sparad check-in. Mobilvyn och ZIP/FIT-import till testkontot kontrollerade utan konsolfel. Förhandsvisningen använder bara syntetiska data.
 - Separat befintlig behörighetsfråga utanför appens egna tabeller väntar på användarens beslut. Detaljer finns i den pågående uppgiften, inte i det offentliga underlaget. Ingen ändring av det separata flödet är gjord.
-- Nästa: skapa PR och publicera på godkänt Pages-mål; verifiera publicerad version och spara slutligt läge. Hantera det separata behörighetsflödet bara efter användarens beslut.
+- Efter publicering: sju centrala HTML-/JavaScript-filer kontrollerades byte för byte mot releaseversionen. Inloggningsskyddet fungerar i den publicerade webbläsarvyn utan konsolfel. Ingen inloggad användarsession testades i den publika frontendvyn; dataflöden verifierades med syntetisk frontend och återställda transaktionstester i Supabase.
+- Nästa: användaren loggar in på dashboarden och sparar sina mål/tillgängliga dagar. Den enkla extrapoleringen är kvar. Inget installations- eller publiceringsarbete återstår. Hantera det separata behörighetsflödet bara efter användarens beslut; beslutet är ännu inte lämnat.
